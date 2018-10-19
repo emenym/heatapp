@@ -189,15 +189,16 @@ int main (int argc, char **argv)
       break;
     }
   }//end while
-      printf("\nGetting heat bits\n");
-      usbDIn_USB1024LS(hid, DIO_PORTA, &input);
-      printf("PORTA: %d ", input);
-      printBits(sizeof(input), &input);
-      printf("\n");
-      usbDIn_USB1024LS(hid, DIO_PORTB, &input);
-      printf("PORTB: %d ", input);
-      printBits(sizeof(input), &input);
-      printf("\n");
+
+  //printf("\nGetting heat bits\n");
+  usbDIn_USB1024LS(hid, DIO_PORTA, &input);
+  printf("PORTA: %d ", input);
+  //printBits(sizeof(input), &input);
+  printf("\n");
+  usbDIn_USB1024LS(hid, DIO_PORTB, &input);
+  printf("PORTB: %d ", input);
+  //printBits(sizeof(input), &input);
+  printf("\n");
 
 
 }
