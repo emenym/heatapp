@@ -15,7 +15,22 @@
   <body>
     <h1>{{porta}}</h1>
     <h1>{{portb}}</h1>
-    <img src="/static/images/heat_list.jpg" alt="woo" width="50%" height="auto">  
+
+
+    <div class="table-responsive">
+      <table class="table">
+      <tbody>
+      {% for zone, state in zone_list.items() %}
+         <tr>
+              <th> {{ zone }} </th>
+              <td><img src="/static/images/{{state}}.jpg" height=12px width=12px> </td>
+         </tr>
+      {% endfor %}
+  </tbody>
+      </table>
+    </div>
+
+
 
 
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>

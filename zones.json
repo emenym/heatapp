@@ -1,0 +1,18 @@
+{  
+   "PORTA":{  
+      "0":"Apt Bedroom",
+      "1":"Apt Living Room",
+      "2":"Apt Bath Room",
+      "3":"Mike's Office",
+      "4":"Mom's Office",
+      "5":"Danielle's Office",
+      "6":"Family Room",
+      "7":"Dining Room"
+   },
+   "PORTB":{  
+      "0":"Living Room",
+      "1":"Upstairs Bath Room",
+      "2":"Master Bedroom",
+      "3":"Mike's Bedroom"
+   }
+}
