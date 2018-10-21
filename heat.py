@@ -11,7 +11,7 @@ app = Flask(__name__)
 def heat():
     zones = get_zones()
     heat_bits = parse_heat_bits(get_heat_bits())
-    #heat_bits = {'PORTA': '00001010', 'PORTB': '00000001'}
+    # heat_bits = {'PORTA': '00001010', 'PORTB': '00000001'}
     zone_list = translate_to_zones(zones, heat_bits)
 
     return render_template(
@@ -20,6 +20,7 @@ def heat():
              portb=heat_bits['PORTB'],
              zone_list=zone_list
            )
+
 
 def translate_to_zones(zones, heat_bits):
     heat_dict = {}
@@ -52,9 +53,9 @@ def parse_heat_bits(mccdaq_out):
     ports_dict = {'PORTA':'', 'PORTB':''}
     for line in mccdaq_out.split('\n'):
         if line.startswith('PORTA'):
-            ports_dict['PORTA'] = format(int(line.split()[1]),'0>8b')
+            ports_dict['PORTA'] = format(int(line.split()[1]), '0>8b')
         if line.startswith('PORTB'):
-            ports_dict['PORTB'] = format(int(line.split()[1]),'0>8b')
+            ports_dict['PORTB'] = format(int(line.split()[1]), '0>8b')
     print(ports_dict)
     return ports_dict
 
