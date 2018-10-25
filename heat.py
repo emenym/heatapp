@@ -19,11 +19,11 @@ def chart():
                            labels=labels,
                            values=values)
 
+
 @app.route("/")
 def heat():
     zones = poller.get_zones()
     heat_bits = poller.parse_port_status(poller.get_port_status())
-    # heat_bits = {'PORTA': '00001010', 'PORTB': '00000001'}
     zone_list = poller.translate_to_zones(zones, heat_bits)
     return render_template(
         'index.html',

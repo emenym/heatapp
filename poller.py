@@ -99,32 +99,6 @@ def save_stats(stats):
     redis_connection.set("stats", json.dumps(stats))
 
 
-
-
-    # if state_history != current_state:
-    #     print("THINGS BE DIFFERENT HERE")
-    #     #is something on that wasn't?
-    #     historical_set = set(state_history.items())
-    #     comparison_Set = set(current_state.items())
-    #
-    #     # setof things that are different
-    #     # dict(comparison_Set- historical_set) to turn into dict
-    #     print(comparison_Set - historical_set)
-    #     diff_set = comparison_Set - historical_set
-    #     for diff in diff_set:
-    #         now = datetime.datetime.now()
-    #         # new bit on
-    #         if diff[1] is "@":
-    #             stats[diff[0]]["last_seen"] = now.strftime("%m-%d-%Y %H:%M:%S")
-    #             print('mer')
-    #         else:
-    #             # new bit off
-    #             pass
-    #
-    #
-    #
-    # else:
-
 def translate_to_zones(zones, heat_bits):
     heat_dict = {}
     for z in zones['PORTA']:
@@ -133,7 +107,6 @@ def translate_to_zones(zones, heat_bits):
             heat_dict[zones['PORTA'][z]] = "1"
         else:
             heat_dict[zones['PORTA'][z]] = "0"
-            # heat_dict[zones['PORTA'][z]] = big_end[int(z)]
 
     for z in zones['PORTB']:
         big_end = heat_bits['PORTB'][::-1]
@@ -148,6 +121,7 @@ def get_port_status():
     cmd = 'mccdaq/get_heat'
     completed = subprocess.run(cmd, stdout=subprocess.PIPE)
     out = completed.stdout.decode('utf-8')
+    print(out)
     return out
 
 
@@ -166,6 +140,7 @@ def get_zones():
     zones = {}
     with open('zones.json') as f:
         zones = json.load(f)
+    f.close()
     return zones
 
 
