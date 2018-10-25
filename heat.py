@@ -1,25 +1,56 @@
 import os
 import json
+import time
+import redis
 import subprocess
 from flask import Flask
 from flask import render_template
+
+import poller
+
 
 app = Flask(__name__)
 
 
 @app.route("/")
+def chart():
+    data = {'username': '1', 'site': '0'}
+    zones = poller.get_zones()
+    heat_bits = {'PORTA': '00001010', 'PORTB': '00000001'}
+    zone_list = poller.translate_to_zones(zones, heat_bits)
+    stats = poller.get_stats()
+
+    labels = list(stats.keys())
+    values = [11123, 42344, 145623, 41562, 56789, 12355, 81234, 134450, 41562, 43212, 44424, 12345]
+    # for zone in stats:
+    #     values.append(stats[zone]['uptime'])
+
+    return render_template("chart.html",
+                           labels=labels,
+                           values=values)
+
+@app.route("/")
 def heat():
     zones = get_zones()
-    heat_bits = parse_heat_bits(get_heat_bits())
-    # heat_bits = {'PORTA': '00001010', 'PORTB': '00000001'}
+    # heat_bits = parse_port_status(get_port_status())
+    heat_bits = {'PORTA': '00001010', 'PORTB': '00000001'}
     zone_list = translate_to_zones(zones, heat_bits)
+    do_metrics(zone_list)
 
     return render_template(
-             'index.html',
+             'mdb_index.html',
              porta=heat_bits['PORTA'],
              portb=heat_bits['PORTB'],
              zone_list=zone_list
            )
+
+
+def do_metrics(current_state):
+    state_history = {}
+    redis_connection = redis.StrictRedis(host=os.environ.get("REDIS_HOST", "192.168.1.49"),
+                                         port=os.environ.get("REDIS_PORT", 6379),
+                                         password=os.environ.get("REDIS_AUTH", "biglongsuperfantasticpassword"))
+    print("doing metrics")
 
 
 def translate_to_zones(zones, heat_bits):
@@ -68,6 +99,6 @@ def get_zones():
 
 
 if __name__ == "__main__":
-      port = os.environ.get('PORT', 8080)
-      app.run(host='0.0.0.0', port=port, debug=True)
+    port = os.environ.get('PORT', 8080)
+    app.run(host='0.0.0.0', port=port, debug=True)
 

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  <title>Charts</title>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+  <!-- Bootstrap core CSS -->
+  <link href="../static/lib/mdbootstrap/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Material Design Bootstrap -->
+  <link href="../static/lib/mdbootstrap/css/mdb.min.css" rel="stylesheet">
+  <!-- Your custom styles (optional) -->
+  <link href="../static/lib/mdbootstrap/css/style.css" rel="stylesheet">
+</head>
+
+<body>
+
+    <div class=" container flex-center flex-column">
+    <!--<div class="col-md-5">-->
+      <!--<canvas id="chart" style="max-width: 500px;"></canvas>-->
+        <canvas id="chart" ></canvas>
+
+    </div>
+
+
+  <!-- SCRIPTS -->
+  <!-- JQuery -->
+  <script type="text/javascript" src="../static/lib/mdbootstrap/js/jquery-3.3.1.min.js"></script>
+  <!-- Bootstrap tooltips -->
+  <script type="text/javascript" src="../static/lib/mdbootstrap/js/popper.min.js"></script>
+  <!-- Bootstrap core JavaScript -->
+  <script type="text/javascript" src="../static/lib/mdbootstrap/js/bootstrap.min.js"></script>
+  <!-- MDB core JavaScript -->
+  <script type="text/javascript" src="../static/lib/mdbootstrap/js/mdb.min.js"></script>
+
+  <script>
+  function random_rgba(alpha) {
+    var o = Math.round, r = Math.random, s = 255;
+    if(alpha == undefined){
+        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + ".5" + ')';
+    }
+        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + "1" + ')';
+    }
+    colors = [{% for item in labels %}
+                  random_rgba(),
+              {% endfor %}]
+    border_colors = [];
+    for (var i = 0; i < colors.length; i++){
+        border_colors.push(colors[i].replace('.5','1'));
+    }
+
+    var ctx = document.getElementById("chart").getContext('2d');
+    var myChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: [{% for item in labels %}
+                  "{{item}}",
+              {% endfor %}],
+        datasets: [{
+            label: 'Zones',
+            data: [{% for item in values %}
+                      {{item}},
+                    {% endfor %}],
+            backgroundColor: colors,
+            borderColor: border_colors,
+            borderWidth: 1
+        }]
+    },
+    options: {
+        scales: {
+            yAxes: [{
+                ticks: {beginAtZero:true},
+                scaleLabel: { display: true, labelString: 'Uptime in Seconds', fontColor: 'blue' }
+
+            }],
+            xAxes: [{
+                ticks: {autoSkip: false},
+                scaleLabel: {display: false, fontColor: 'green'}
+            }]
+        }
+
+    }
+  });
+//{ responsive: true, scales: { xAxes: [{ gridLines: { color: 'rgba(100, 100, 100, 1.0)' }, scaleLabel: { display: true, labelString: 'Label 2', fontColor: 'blue' } }], yAxes: [{ gridLines: { color: 'rgba(100, 100, 100, 1.0)' }, scaleLabel: { display: true, labelString: 'Label 1', fontColor: 'red' } }], } };
+
+</script>
+
+</body>
+
+</html>
