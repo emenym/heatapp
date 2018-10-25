@@ -13,17 +13,18 @@ redis_connection = redis.StrictRedis(host=os.environ.get("REDIS_HOST", "192.168.
 
 TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
 
+
 def main():
     zones = get_zones()
-    # port_status = parse_port_status(get_port_status())
-    port_status = {'PORTA': '00001010', 'PORTB': '00000001'}
+    port_status = parse_port_status(get_port_status())
+    # port_status = {'PORTA': '00001010', 'PORTB': '00000001'}
     port_state = translate_to_zones(zones, port_status)
     init_stats(port_state)
 
     # stats = get_stats(zones)
     while True:
-        # port_status = parse_port_status(get_port_status())
-        port_status = {'PORTA': '00001000', 'PORTB': '00000001'}
+        port_status = parse_port_status(get_port_status())
+        # port_status = {'PORTA': '00001000', 'PORTB': '00000001'}
         port_state = translate_to_zones(zones, port_status)
         do_metrics(port_state)
         time.sleep(1)
@@ -34,15 +35,7 @@ def get_stats():
     #     'Apt Bedroom': {'state': '1',
     #                     'last_seen': "09-26-2014 16:34:22",
     #                     'uptime': '1234',
-    #                     'total_runtime': '5000'},
-    #     'Apt Living Room': {'state': '1',
-    #                         'last_seen': "date",
-    #                         'uptime': '11111',
-    #                         'total_runtime': '5000'},
-    #     'Apt Bath Room': {'state': '1',
-    #                       'last_seen': "date",
-    #                       'uptime': '55555',
-    #                       'total_runtime': '5000'}
+    #                     'total_runtime': '5000'}
     # }
     raw = redis_connection.get("stats")
     if raw:
@@ -58,17 +51,17 @@ def init_stats(zones):
                  'uptime': '0',
                  'total_runtime': '0'}
     stats = get_stats()
+    # look for changes in zone layout
     diddled = 0
     for zone in zones:
         if zone in stats:
-            print("zon is here")
+            pass
         else:
             diddled = 1
             stats[zone] = init_dict
 
     if diddled:
         save_stats(stats)
-        # redis_connection.set("stats", json.dumps(stats))
     return stats
 
 
@@ -132,14 +125,11 @@ def save_stats(stats):
     #
     # else:
 
-
-
 def translate_to_zones(zones, heat_bits):
     heat_dict = {}
     for z in zones['PORTA']:
         big_end = heat_bits['PORTA'][::-1]
         if big_end[int(z)] is "1":
-            print("IS ON")
             heat_dict[zones['PORTA'][z]] = "1"
         else:
             heat_dict[zones['PORTA'][z]] = "0"
@@ -148,7 +138,6 @@ def translate_to_zones(zones, heat_bits):
     for z in zones['PORTB']:
         big_end = heat_bits['PORTB'][::-1]
         if big_end[int(z)] is "1":
-            print("IS ON")
             heat_dict[zones['PORTB'][z]] = "1"
         else:
             heat_dict[zones['PORTB'][z]] = "0"
