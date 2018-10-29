@@ -27,7 +27,7 @@ def main():
         # port_status = {'PORTA': '00001000', 'PORTB': '00000001'}
         port_state = translate_to_zones(zones, port_status)
         do_metrics(port_state)
-        time.sleep(1)
+        time.sleep(2)
 
 
 def get_stats():
@@ -88,8 +88,10 @@ def do_metrics(current_state):
         elif current_state[zone] == '1' and stats[zone]['state'] == '1':
             # stayed on
             elapsed = now - datetime.datetime.strptime(stats[zone]['last_seen'], TIME_FORMAT)
+            total_run = int(stats[zone]['total_runtime'])
 
             stats[zone]["uptime"] = int(stats[zone]["uptime"]) + elapsed.seconds
+            stats[zone]["total_runtime"] = total_run + elapsed.seconds
             stats[zone]["last_seen"] = now.strftime(TIME_FORMAT)
 
     save_stats(stats)

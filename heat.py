@@ -12,12 +12,15 @@ app = Flask(__name__)
 def chart():
     stats = poller.get_stats()
     values = []
+    runtimes = []
     labels = list(stats.keys())
     for z in labels:
         values.append(stats[z]['uptime'])
+        runtimes.append(stats[z]['total_runtime'])
     return render_template("chart.html",
                            labels=labels,
-                           values=values)
+                           values=values,
+                           runtimes=runtimes)
 
 
 @app.route("/")
@@ -35,5 +38,8 @@ def heat():
 
 if __name__ == "__main__":
     port = os.environ.get('PORT', 8080)
-    app.run(host='0.0.0.0', port=port, debug=True)
+    if port is 8080:
+        app.run(host='0.0.0.0', port=port, debug=True)
+    else:
+        app.run(host='0.0.0.0', port=port, debug=True)
 

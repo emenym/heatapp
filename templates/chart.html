@@ -22,7 +22,10 @@
     <!--<div class="col-md-5">-->
       <!--<canvas id="chart" style="max-width: 500px;"></canvas>-->
         <canvas id="chart" ></canvas>
+    </div>
 
+    <div class=" container flex-center flex-column">
+        <canvas id="runtime_chart" ></canvas>
     </div>
 
 
@@ -70,6 +73,8 @@
         }]
     },
     options: {
+        title:{display: true, text: 'Uptime', fontSize: 18},
+        legend: {display: false},
         scales: {
             yAxes: [{
                 ticks: {beginAtZero:true},
@@ -87,6 +92,61 @@
 //{ responsive: true, scales: { xAxes: [{ gridLines: { color: 'rgba(100, 100, 100, 1.0)' }, scaleLabel: { display: true, labelString: 'Label 2', fontColor: 'blue' } }], yAxes: [{ gridLines: { color: 'rgba(100, 100, 100, 1.0)' }, scaleLabel: { display: true, labelString: 'Label 1', fontColor: 'red' } }], } };
 
 </script>
+
+<script>
+  function random_rgba(alpha) {
+    var o = Math.round, r = Math.random, s = 255;
+    if(alpha == undefined){
+        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + ".5" + ')';
+    }
+        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + "1" + ')';
+    }
+    colors = [{% for item in labels %}
+                  random_rgba(),
+              {% endfor %}]
+    border_colors = [];
+    for (var i = 0; i < colors.length; i++){
+        border_colors.push(colors[i].replace('.5','1'));
+    }
+
+    var ctx = document.getElementById("runtime_chart").getContext('2d');
+    var myChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: [{% for item in labels %}
+                  "{{item}}",
+              {% endfor %}],
+        datasets: [{
+
+            data: [{% for item in runtimes %}
+                      {{item}},
+                    {% endfor %}],
+            backgroundColor: colors,
+            borderColor: border_colors,
+            borderWidth: 1
+        }]
+    },
+    options: {
+        title: {display: true, text: 'Total Runtime', fontSize: 18},
+        legend: {display: false},
+        scales: {
+            yAxes: [{
+                ticks: {beginAtZero:true},
+                scaleLabel: { display: true, labelString: 'Runtime in Seconds', fontColor: 'blue' }
+
+            }],
+            xAxes: [{
+                ticks: {autoSkip: false},
+                scaleLabel: {display: false, fontColor: 'green'}
+            }]
+        }
+
+    }
+  });
+
+</script>
+
+
 
 </body>
 
