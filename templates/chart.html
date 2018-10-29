@@ -58,7 +58,7 @@
     type: 'bar',
     data: {
         labels: [{% for item in labels %}
-                  "{{item}}",
+                  "{{item | safe}}",
               {% endfor %}],
         datasets: [{
             label: 'Uptime',
@@ -112,7 +112,7 @@
     type: 'bar',
     data: {
         labels: [{% for item in labels %}
-                  "{{item}}",
+                  "{{item | safe}}",
               {% endfor %}],
         datasets: [{
 
