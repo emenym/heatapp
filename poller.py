@@ -35,7 +35,11 @@ def get_stats():
     #     'Apt Bedroom': {'state': '1',
     #                     'last_seen': "09-26-2014 16:34:22",
     #                     'uptime': '1234',
-    #                     'total_runtime': '5000'}
+    #                     'total_runtime': '5000',
+    #                     'transitions': [('09-26-2014 16:34:22', '09-26-2014 16:34:23'),
+    #                                     ('09-26-2014 16:44:22', '09-26-2014 16:44:23')
+    #                                     ]
+    #                    }
     # }
     raw = redis_connection.get("stats")
     if raw:
@@ -49,7 +53,9 @@ def init_stats(zones):
     init_dict = {'state': '0',
                  'last_seen': '0',
                  'uptime': '0',
-                 'total_runtime': '0'}
+                 'total_runtime': '0',
+                 'transitions': []
+                 }
     stats = get_stats()
     # look for changes in zone layout
     diddled = 0
@@ -120,6 +126,8 @@ def translate_to_zones(zones, heat_bits):
 
 
 def get_port_status():
+    if os.environ.get('DEBUGGER'):
+        return 'USB 1024LS Device is found! \nPORTA: 0\nPORTB: 0'
     cmd = 'mccdaq/get_heat'
     completed = subprocess.run(cmd, stdout=subprocess.PIPE)
     out = completed.stdout.decode('utf-8')
