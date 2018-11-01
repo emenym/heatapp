@@ -1,0 +1,12 @@
+[Unit]
+Description=Polling service for Heat
+After=multi-user.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/heatapp
+ExecStart=/usr/bin/python3 /var/heatapp/poller.py > /var/heatapp/log.log 2>&1
+Environment=PORT=80
+
+[Install]
+WantedBy=multi-user.target
