@@ -11,20 +11,18 @@ redis_connection = redis.StrictRedis(host=os.environ.get("REDIS_HOST", "192.168.
                                      charset="utf-8",
                                      decode_responses=True)
 
+STATS_KEY = 'stats'
 TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
 
 
 def main():
     zones = get_zones()
     port_status = parse_port_status(get_port_status())
-    # port_status = {'PORTA': '00001010', 'PORTB': '00000001'}
     port_state = translate_to_zones(zones, port_status)
     init_stats(port_state)
 
-    # stats = get_stats(zones)
     while True:
         port_status = parse_port_status(get_port_status())
-        # port_status = {'PORTA': '00001000', 'PORTB': '00000001'}
         port_state = translate_to_zones(zones, port_status)
         do_metrics(port_state)
         time.sleep(2)
@@ -41,12 +39,24 @@ def get_stats():
     #                                     ]
     #                    }
     # }
-    raw = redis_connection.get("stats")
+
+    if os.environ.get('STAGING'):
+        global STATS_KEY
+        STATS_KEY = 'staging_stats'
+
+    raw = redis_connection.get(STATS_KEY)
     if raw:
         stats = json.loads(raw)
     else:
         stats = {}
     return stats
+
+
+def save_stats(stats):
+    if os.environ.get('STAGING'):
+        global STATS_KEY
+        STATS_KEY = 'staging_stats'
+    redis_connection.set(STATS_KEY, json.dumps(stats))
 
 
 def init_stats(zones):
@@ -101,10 +111,6 @@ def do_metrics(current_state):
             stats[zone]["last_seen"] = now.strftime(TIME_FORMAT)
 
     save_stats(stats)
-
-
-def save_stats(stats):
-    redis_connection.set("stats", json.dumps(stats))
 
 
 def translate_to_zones(zones, heat_bits):

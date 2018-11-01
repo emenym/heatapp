@@ -22,7 +22,8 @@ def chart():
                            values=values,
                            runtimes=runtimes)
 
-#TODO get heatbits from redis instead of mccdaq
+
+# TODO get heatbits from redis instead of mccdaq
 @app.route("/")
 def heat():
     zones = poller.get_zones()
