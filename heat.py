@@ -17,8 +17,8 @@ def chart():
     day_values = []
     labels = list(stats.keys())
     for z in labels:
-        values.append(stats[z]['uptime'])
-        runtimes.append(stats[z]['total_runtime'])
+        values.append(get_latest_uptime(z, stats))
+        runtimes.append(get_total_uptime(z, stats))
         day_values.append(get_day_uptime(z, stats))
     return render_template("chart.html",
                            labels=labels,
@@ -49,13 +49,30 @@ def date_range_to_seconds(d1, d2):
     return delta.seconds
 
 
-def get_day_uptime(z, stats):
-
-    day_uptime = 0
-
+def get_latest_uptime(z, stats):
     all_trans = stats[z]['transitions']
     if not all_trans:
-        return day_uptime
+        return 0
+
+    latest_transition = all_trans[-1]
+    if len(latest_transition) > 1:
+        return 0
+
+    return get_uptime([latest_transition])
+
+
+def get_total_uptime(z, stats):
+    all_trans = stats[z]['transitions']
+    if not all_trans:
+        return 0
+
+    return get_uptime(all_trans)
+
+
+def get_day_uptime(z, stats):
+    all_trans = stats[z]['transitions']
+    if not all_trans:
+        return 0
 
     dayago = datetime.datetime.now() - datetime.timedelta(hours=24)
     day_transitions = []
@@ -74,13 +91,14 @@ def get_uptime(tranision_list):
             uptime += date_range_to_seconds(transition[0], transition[1])
         else:
             uptime += date_range_to_seconds(transition[0],
-                                                datetime.datetime.now().strftime(poller.TIME_FORMAT))
+                                            datetime.datetime.now().strftime(poller.TIME_FORMAT))
 
     return uptime
+
 
 if __name__ == "__main__":
     port = os.environ.get('PORT', 8080)
     if port is 8080:
         app.run(host='0.0.0.0', port=port, debug=True)
     else:
-        app.run(host='0.0.0.0', port=port, debug=True)
+        app.run(host='0.0.0.0', port=port, debug=False)

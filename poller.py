@@ -13,6 +13,7 @@ redis_connection = redis.StrictRedis(host=os.environ.get("REDIS_HOST", "192.168.
 
 STATS_KEY = 'stats'
 TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
+DEBUG_STATUS = 'USB 1024LS Device is found! \nPORTA: 0\nPORTB: 0'
 
 
 def main():
@@ -61,9 +62,6 @@ def save_stats(stats):
 
 def init_stats(zones):
     init_dict = {'state': '0',
-                 'last_seen': '0',
-                 'uptime': '0',
-                 'total_runtime': '0',
                  'transitions': []
                  }
     stats = get_stats()
@@ -94,13 +92,11 @@ def do_metrics(current_state):
         elif current_state[zone] == '1' and stats[zone]['state'] == '0':
             # turned on
             stats[zone]["state"] = "1"
-            stats[zone]["last_seen"] = now.strftime(TIME_FORMAT)
             stats[zone]["transitions"].append([now.strftime(TIME_FORMAT)])
 
         elif current_state[zone] == '0' and stats[zone]['state'] == '1':
             # turned off
             stats[zone]["state"] = "0"
-            stats[zone]["uptime"] = "0"
 
             try:
                 latest_transition = stats[zone]["transitions"].pop()
@@ -116,12 +112,7 @@ def do_metrics(current_state):
 
         elif current_state[zone] == '1' and stats[zone]['state'] == '1':
             # stayed on
-            elapsed = now - datetime.datetime.strptime(stats[zone]['last_seen'], TIME_FORMAT)
-            total_run = int(stats[zone]['total_runtime'])
-
-            stats[zone]["uptime"] = int(stats[zone]["uptime"]) + elapsed.seconds
-            stats[zone]["total_runtime"] = total_run + elapsed.seconds
-            stats[zone]["last_seen"] = now.strftime(TIME_FORMAT)
+            pass
 
     save_stats(stats)
 
@@ -146,7 +137,7 @@ def translate_to_zones(zones, heat_bits):
 
 def get_port_status():
     if os.environ.get('DEBUGGER'):
-        return 'USB 1024LS Device is found! \nPORTA: 0\nPORTB: 0'
+        return DEBUG_STATUS
     cmd = 'mccdaq/get_heat'
     completed = subprocess.run(cmd, stdout=subprocess.PIPE)
     out = completed.stdout.decode('utf-8')
