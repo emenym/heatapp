@@ -37,7 +37,11 @@
       {% for zone, state in zone_list.items() %}
          <tr>
               <th> {{ zone }} </th>
-              <td><img src="/static/images/{{state}}.jpg" height=12px width=12px> </td>
+             {% if state == "1" %}
+                <td><img src="/static/images/green_circle.png" height=12px width=12px> </td>
+             {% else %}
+                <td><img src="/static/images/red.png" height=12px width=12px> </td>
+             {% endif %}
          </tr>
       {% endfor %}
   </tbody>
