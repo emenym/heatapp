@@ -1,4 +1,5 @@
 import os
+import datetime
 from flask import Flask
 from flask import render_template
 
@@ -13,14 +14,17 @@ def chart():
     stats = poller.get_stats()
     values = []
     runtimes = []
+    day_values = []
     labels = list(stats.keys())
     for z in labels:
         values.append(stats[z]['uptime'])
         runtimes.append(stats[z]['total_runtime'])
+        day_values.append(get_day_uptime(z, stats))
     return render_template("chart.html",
                            labels=labels,
                            values=values,
-                           runtimes=runtimes)
+                           runtimes=runtimes,
+                           day_values=day_values)
 
 
 # TODO get heatbits from redis instead of mccdaq
@@ -36,6 +40,43 @@ def heat():
         zone_list=zone_list
     )
 
+
+def date_range_to_seconds(d1, d2):
+    d1 = datetime.datetime.strptime(d1, poller.TIME_FORMAT)
+    d2 = datetime.datetime.strptime(d2, poller.TIME_FORMAT)
+
+    delta = d2 - d1
+    return delta.seconds
+
+
+def get_day_uptime(z, stats):
+
+    day_uptime = 0
+
+    all_trans = stats[z]['transitions']
+    if not all_trans:
+        return day_uptime
+
+    dayago = datetime.datetime.now() - datetime.timedelta(hours=24)
+    day_transitions = []
+
+    for trans in all_trans:
+        if datetime.datetime.strptime(trans[0], poller.TIME_FORMAT) > dayago:
+            day_transitions.append(trans)
+
+    return get_uptime(day_transitions)
+
+
+def get_uptime(tranision_list):
+    uptime = 0
+    for transition in tranision_list:
+        if len(transition) > 1:
+            uptime += date_range_to_seconds(transition[0], transition[1])
+        else:
+            uptime += date_range_to_seconds(transition[0],
+                                                datetime.datetime.now().strftime(poller.TIME_FORMAT))
+
+    return uptime
 
 if __name__ == "__main__":
     port = os.environ.get('PORT', 8080)

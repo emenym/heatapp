@@ -34,8 +34,8 @@ def get_stats():
     #                     'last_seen': "09-26-2014 16:34:22",
     #                     'uptime': '1234',
     #                     'total_runtime': '5000',
-    #                     'transitions': [('09-26-2014 16:34:22', '09-26-2014 16:34:23'),
-    #                                     ('09-26-2014 16:44:22', '09-26-2014 16:44:23')
+    #                     'transitions': ['09-26-2014 16:34:22', '09-26-2014 16:34:23',
+    #                                     '09-26-2014 16:44:22', '09-26-2014 16:44:23'
     #                                     ]
     #                    }
     # }
@@ -95,11 +95,24 @@ def do_metrics(current_state):
             # turned on
             stats[zone]["state"] = "1"
             stats[zone]["last_seen"] = now.strftime(TIME_FORMAT)
+            stats[zone]["transitions"].append([now.strftime(TIME_FORMAT)])
 
         elif current_state[zone] == '0' and stats[zone]['state'] == '1':
             # turned off
             stats[zone]["state"] = "0"
             stats[zone]["uptime"] = "0"
+
+            try:
+                latest_transition = stats[zone]["transitions"].pop()
+            except IndexError:
+                # turn on transition not recorded, do nothing
+                return
+            if not latest_transition:
+                # transition is empty, discard it
+                return
+
+            latest_transition.append(now.strftime(TIME_FORMAT))
+            stats[zone]["transitions"].append(latest_transition)
 
         elif current_state[zone] == '1' and stats[zone]['state'] == '1':
             # stayed on

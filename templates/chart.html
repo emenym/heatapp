@@ -23,8 +23,14 @@
     </div>
 
     <div class=" container flex-center flex-column" style="border:1px solid black">
+        <canvas id="day_chart" ></canvas>
+    </div>
+
+    <div class=" container flex-center flex-column" style="border:1px solid black">
         <canvas id="runtime_chart" ></canvas>
     </div>
+
+
 
 
   <!-- SCRIPTS -->
@@ -48,8 +54,8 @@
     if (hours   < 10) {hours   = "0"+hours;}
     if (minutes < 10) {minutes = "0"+minutes;}
     if (seconds < 10) {seconds = "0"+seconds;}
-    return hours + ':' + minutes + ':' + seconds;
-    //return hours + 'h:' + minutes + 'm:' + seconds + 's';
+    //return hours + ':' + minutes + ':' + seconds;
+    return hours + 'h:' + minutes + 'm:' + seconds + 's';
 }</script>
   <script>
   function random_rgba(alpha) {
@@ -87,6 +93,9 @@
     options: {
         tooltips: {
             callbacks: {
+                label: function(toolTipItems, data){
+                    return toolTipItems.yLabel + 's';
+                },
                 afterLabel: function(tooltipItem, data){
                     return data['datasets'][0]['data'][tooltipItem['index']].toString().toHHMMSS();
                 }
@@ -148,14 +157,12 @@
     options: {
         tooltips: {
             callbacks: {
+                label: function(toolTipItems, data){
+                    return toolTipItems.yLabel + 's';
+                },
                 afterLabel: function(tooltipItem, data){
-                var duration = moment.duration(seconds, 'seconds');
-                var formatted = duration.format("hh:mm:ss");
-                            var seconds = data['datasets'][0]['data'][tooltipItem['index']]
-                            var duration = moment.duration(seconds, 'seconds');
-                //            return moment().format(data['datasets'][0]['data'][tooltipItem['index']]);
-                            return duration.format("hh:mm:ss");
-                       }
+                    return data['datasets'][0]['data'][tooltipItem['index']].toString().toHHMMSS();
+                }
             }
         },
         title: {display: true, text: 'Total Runtime', fontSize: 18},
@@ -178,7 +185,68 @@
 
 </script>
 
+<script>
+  function random_rgba(alpha) {
+    var o = Math.round, r = Math.random, s = 255;
+    if(alpha == undefined){
+        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + ".5" + ')';
+    }
+        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + "1" + ')';
+    }
+    colors = [{% for item in labels %}
+                  random_rgba(),
+              {% endfor %}]
+    border_colors = [];
+    for (var i = 0; i < colors.length; i++){
+        border_colors.push(colors[i].replace('.5','1'));
+    }
 
+    var ctx = document.getElementById("day_chart").getContext('2d');
+    var myChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: [{% for item in labels %}
+                  "{{item | safe}}",
+              {% endfor %}],
+        datasets: [{
+            label: '24 Hour Uptime',
+            data: [{% for item in day_values %}
+                      {{item}},
+                    {% endfor %}],
+            backgroundColor: colors,
+            borderColor: border_colors,
+            borderWidth: 1
+        }]
+    },
+    options: {
+        tooltips: {
+            callbacks: {
+                label: function(toolTipItems, data){
+                    return toolTipItems.yLabel + 's';
+                },
+                afterLabel: function(tooltipItem, data){
+                    return data['datasets'][0]['data'][tooltipItem['index']].toString().toHHMMSS();
+                }
+            }
+        },
+        title:{display: true, text: '24 Hour Uptime', fontSize: 18},
+        legend: {display: false},
+        scales: {
+            yAxes: [{
+                ticks: {beginAtZero:true},
+                scaleLabel: { display: true, labelString: '24 Hour Uptime in Seconds', fontColor: 'blue' }
+
+            }],
+            xAxes: [{
+                ticks: {autoSkip: false},
+                scaleLabel: {display: false, fontColor: 'green'}
+            }]
+        }
+
+    }
+  });
+
+</script>
 
 </body>
 
