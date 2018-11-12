@@ -46,20 +46,34 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-duration-format/1.3.0/moment-duration-format.min.js"></script>
   <script>
     String.prototype.toHHMMSS = function () {
-    var sec_num = parseInt(this, 10); // don't forget the second param
-    var hours   = Math.floor(sec_num / 3600);
-    var minutes = Math.floor((sec_num - (hours * 3600)) / 60);
-    var seconds = sec_num - (hours * 3600) - (minutes * 60);
+        var sec_num = parseInt(this, 10); // don't forget the second param
+        var hours   = Math.floor(sec_num / 3600);
+        var minutes = Math.floor((sec_num - (hours * 3600)) / 60);
+        var seconds = sec_num - (hours * 3600) - (minutes * 60);
 
-    if (hours   < 10 && hours > 0) {hours   = "0"+hours;}
+        if (hours   < 10 && hours > 0) {hours   = "0"+hours;}
 
-    if (seconds < 10) {seconds = "0"+seconds;}
+        if (seconds < 10) {seconds = "0"+seconds;}
 
-    if (hours == 0){
-        return minutes + 'm ' + seconds + 's';
+        if (hours == 0){
+            return minutes + 'm ' + seconds + 's';
+        }
+        return hours + 'h ' + minutes + 'm ' + seconds + 's';
     }
-    return hours + 'h ' + minutes + 'm ' + seconds + 's';
-}</script>
+    function seconds_to_hms(sec_num) {
+        var hours   = Math.floor(sec_num / 3600);
+        var minutes = Math.floor((sec_num - (hours * 3600)) / 60);
+        var seconds = sec_num - (hours * 3600) - (minutes * 60);
+
+        if (seconds < 10) {seconds = "0"+seconds;}
+
+        if (hours == 0){
+            return minutes + 'm ' + seconds + 's';
+        }
+        return hours + 'h ' + minutes + 'm ' + seconds + 's';
+    }
+
+  </script>
   <script>
   function random_rgba(alpha) {
     var o = Math.round, r = Math.random, s = 255;
@@ -140,70 +154,6 @@
         border_colors.push(colors[i].replace('.5','1'));
     }
 
-    var ctx = document.getElementById("runtime_chart").getContext('2d');
-    var myChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: [{% for item in labels %}
-                  "{{item | safe}}",
-              {% endfor %}],
-        datasets: [{
-
-            data: [{% for item in runtimes %}
-                      {{item}},
-                    {% endfor %}],
-            backgroundColor: colors,
-            borderColor: border_colors,
-            borderWidth: 1
-        }]
-    },
-    options: {
-        tooltips: {
-            callbacks: {
-                label: function(toolTipItems, data){
-                    return toolTipItems.yLabel + 's';
-                },
-                afterLabel: function(tooltipItem, data){
-                    return data['datasets'][0]['data'][tooltipItem['index']].toString().toHHMMSS();
-                }
-            }
-        },
-        title: {display: true, text: 'Total Runtime', fontSize: 18},
-        legend: {display: false},
-        scales: {
-            yAxes: [{
-                ticks: {beginAtZero:true},
-                scaleLabel: { display: true, labelString: 'Runtime in Seconds', fontColor: 'blue' }
-
-            }],
-            xAxes: [{
-                ticks: {autoSkip: false},
-                scaleLabel: {display: false, fontColor: 'green'}
-            }]
-        }
-
-    }
-  });
-
-
-</script>
-
-<script>
-  function random_rgba(alpha) {
-    var o = Math.round, r = Math.random, s = 255;
-    if(alpha == undefined){
-        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + ".5" + ')';
-    }
-        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + "1" + ')';
-    }
-    colors = [{% for item in labels %}
-                  random_rgba(),
-              {% endfor %}]
-    border_colors = [];
-    for (var i = 0; i < colors.length; i++){
-        border_colors.push(colors[i].replace('.5','1'));
-    }
-
     var ctx = document.getElementById("day_chart").getContext('2d');
     var myChart = new Chart(ctx, {
     type: 'bar',
@@ -236,7 +186,9 @@
         legend: {display: false},
         scales: {
             yAxes: [{
-                ticks: {beginAtZero:true},
+                ticks: {beginAtZero:true,
+                        userCallback: function(v) { return seconds_to_hms(v) }
+                },
                 scaleLabel: { display: true, labelString: '24 Hour Uptime in Seconds', fontColor: 'blue' }
 
             }],
@@ -250,6 +202,74 @@
   });
 
 </script>
+
+<script>
+  function random_rgba(alpha) {
+    var o = Math.round, r = Math.random, s = 255;
+    if(alpha == undefined){
+        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + ".5" + ')';
+    }
+        return 'rgba(' + o(r()*s) + ',' + o(r()*s) + ',' + o(r()*s) + ',' + "1" + ')';
+    }
+    colors = [{% for item in labels %}
+                  random_rgba(),
+              {% endfor %}]
+    border_colors = [];
+    for (var i = 0; i < colors.length; i++){
+        border_colors.push(colors[i].replace('.5','1'));
+    }
+
+    var ctx = document.getElementById("runtime_chart").getContext('2d');
+    var myChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: [{% for item in labels %}
+                  "{{item | safe}}",
+              {% endfor %}],
+        datasets: [{
+
+            data: [{% for item in runtimes %}
+                      {{item}},
+                    {% endfor %}],
+            backgroundColor: colors,
+            borderColor: border_colors,
+            borderWidth: 1
+        }]
+    },
+    options: {
+        tooltips: {
+            callbacks: {
+                label: function(toolTipItems, data){
+                    return toolTipItems.yLabel + 's';
+                },
+                afterLabel: function(tooltipItem, data){
+                    return data['datasets'][0]['data'][tooltipItem['index']].toString().toHHMMSS();
+                }
+            }
+        },
+        title: {display: true, text: 'Total Runtime', fontSize: 18},
+        legend: {display: false},
+        scales: {
+            yAxes: [{
+                ticks: {beginAtZero:true,
+                        userCallback: function(v) { return seconds_to_hms(v) }
+                },
+                scaleLabel: { display: true, labelString: 'Runtime in Seconds', fontColor: 'blue' }
+
+            }],
+            xAxes: [{
+                ticks: {autoSkip: false},
+                scaleLabel: {display: false, fontColor: 'green'}
+            }]
+        }
+
+    }
+  });
+
+
+</script>
+
+
 
 </body>
 

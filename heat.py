@@ -46,7 +46,7 @@ def date_range_to_seconds(d1, d2):
     d2 = datetime.datetime.strptime(d2, poller.TIME_FORMAT)
 
     delta = d2 - d1
-    return delta.seconds
+    return delta.total_seconds()
 
 
 def get_latest_uptime(z, stats):
