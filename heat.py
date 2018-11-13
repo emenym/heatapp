@@ -97,7 +97,7 @@ def get_uptime(tranision_list):
 
 
 if __name__ == "__main__":
-    port = os.environ.get('PORT', 8080)
+    port = os.environ.get('PORT', 80)
     if port is 8080:
         app.run(host='0.0.0.0', port=port, debug=True)
     else:
