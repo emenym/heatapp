@@ -8,6 +8,18 @@
     <meta http-equiv="refresh" content="60" >
 {% endblock %}
 
+{% block nav_items %}
+    <li class="nav-item">
+        <a class="nav-link" href="chart#chart">Uptime</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="chart#day_chart">24-Hr Uptime</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="chart#runtime_chart">Total Uptime</a>
+    </li>
+{% endblock %}
+
 {% block content %}
     {{ super() }}
     <div class=" container flex-center flex-column">
