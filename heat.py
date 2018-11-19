@@ -27,6 +27,10 @@ def chart():
                            day_values=day_values)
 
 
+def get_port_state_redis():
+    stats = poller.get_stats()
+
+
 # TODO get heatbits from redis instead of mccdaq
 @app.route("/")
 def heat():
@@ -98,7 +102,7 @@ def get_uptime(tranision_list):
 
 if __name__ == "__main__":
     port = os.environ.get('PORT', 80)
-    if port is 8080:
+    if port == '8080':
         app.run(host='0.0.0.0', port=port, debug=True)
     else:
         app.run(host='0.0.0.0', port=port, debug=False)

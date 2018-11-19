@@ -1,47 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta http-equiv="x-ua-compatible" content="ie=edge">
-  <meta http-equiv="refresh" content="60" >
-  <title>Charts</title>
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
-  <!-- Bootstrap core CSS -->
-  <link href="../static/lib/mdbootstrap/css/bootstrap.min.css" rel="stylesheet">
-  <!-- Material Design Bootstrap -->
-  <link href="../static/lib/mdbootstrap/css/mdb.min.css" rel="stylesheet">
-  <!-- Your custom styles (optional) -->
-  <link href="../static/lib/mdbootstrap/css/style.css" rel="stylesheet">
-</head>
+{% block title %}Charts{% endblock %}
 
-<body>
+{% block head %}
+    {{ super() }}
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta http-equiv="refresh" content="60" >
+{% endblock %}
 
-    <div class=" container flex-center flex-column" style="border:1px solid black">
-        <canvas id="chart" ></canvas>
+{% block content %}
+    {{ super() }}
+    <div class=" container flex-center flex-column">
+        <canvas id="chart" style="border-bottom:1px solid firebrick" ></canvas>
     </div>
 
-    <div class=" container flex-center flex-column" style="border:1px solid black">
-        <canvas id="day_chart" ></canvas>
+    <div class=" container flex-center flex-column">
+        <canvas id="day_chart" style="border-bottom:1px solid firebrick"></canvas>
     </div>
 
-    <div class=" container flex-center flex-column" style="border:1px solid black">
-        <canvas id="runtime_chart" ></canvas>
+    <div class=" container flex-center flex-column">
+        <canvas id="runtime_chart" style="border-bottom:1px solid firebrick" ></canvas>
     </div>
 
-
-
-
-  <!-- SCRIPTS -->
-  <!-- JQuery -->
-  <script type="text/javascript" src="../static/lib/mdbootstrap/js/jquery-3.3.1.min.js"></script>
-  <!-- Bootstrap tooltips -->
-  <script type="text/javascript" src="../static/lib/mdbootstrap/js/popper.min.js"></script>
-  <!-- Bootstrap core JavaScript -->
-  <script type="text/javascript" src="../static/lib/mdbootstrap/js/bootstrap.min.js"></script>
-  <!-- MDB core JavaScript -->
   <script type="text/javascript" src="../static/lib/mdbootstrap/js/mdb.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-duration-format/1.3.0/moment-duration-format.min.js"></script>
@@ -135,8 +115,6 @@
 
     }
   });
-//{ responsive: true, scales: { xAxes: [{ gridLines: { color: 'rgba(100, 100, 100, 1.0)' }, scaleLabel: { display: true, labelString: 'Label 2', fontColor: 'blue' } }], yAxes: [{ gridLines: { color: 'rgba(100, 100, 100, 1.0)' }, scaleLabel: { display: true, labelString: 'Label 1', fontColor: 'red' } }], } };
-
 </script>
 
 <script>
@@ -201,7 +179,6 @@
 
     }
   });
-
 </script>
 
 <script>
@@ -266,12 +243,5 @@
 
     }
   });
-
-
 </script>
-
-
-
-</body>
-
-</html>
+{% endblock %}
