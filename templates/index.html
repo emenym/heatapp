@@ -7,7 +7,14 @@
     <meta http-equiv="refresh" content="60" >
 {% endblock %}
 
+{% block nav_items %}
+    <li class="nav-item">
+        <a class="nav-link" href="chart">Chart</a>
+    </li>
+{% endblock %}
+
 {% block content %}
+  {{ super() }}
   <div class="container table-responsive">
   <table class="table">
       <tbody>
