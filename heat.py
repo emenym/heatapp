@@ -81,10 +81,11 @@ def get_day_uptime(z, stats):
     dayago = datetime.datetime.now() - datetime.timedelta(hours=24)
     day_transitions = []
 
-    for trans in all_trans:
+    for trans in reversed(all_trans):
         if datetime.datetime.strptime(trans[0], poller.TIME_FORMAT) > dayago:
             day_transitions.append(trans)
-
+        else:
+            break
     return get_uptime(day_transitions)
 
 
