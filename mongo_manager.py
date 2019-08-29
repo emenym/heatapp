@@ -1,66 +1,52 @@
-
 import os
 import pymongo
 import datetime
 
 
-mongo_client = pymongo.MongoClient("mongodb://{server}:{port}/".format(
-    server=os.environ.get("MONGO_HOST", "127.0.0.1"),
-    port=os.environ.get("MONGO_PORT", 27017)))
-
+STAGING_DB = 'staging'
 DBNAME = 'heatdb'
-COLLECTION = 'tracking'
-STAGING_COLLECTION = 'staging'
+if os.environ.get('STAGING'):
+    DBNAME = STAGING_DB
 STATE_COLLECTION = 'zone_state'
 TRANSITION_COLLECTION = 'transitions'
-TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
+DEBUG = os.environ.get('DEBUG', None)
 
 
 class MongoManager(object):
     def __init__(self, server='127.0.0.1', port=27017):
-        self.client = pymongo.MongoClient("mongodb://{server}:{port}/".format(
-            server=server,
-            port=port))
-        self.db = mongo_client[DBNAME]
-        if os.environ.get('STAGING'):
-            self.collection = self.db[STAGING_COLLECTION]
-        else:
-            self.collection = self.db[COLLECTION]
-            self.states = self.db[STATE_COLLECTION]
-            self.transitions = self.db[TRANSITION_COLLECTION]
+        user = os.environ.get('MONGODB_USER', 'heatapp')
+        pwd = os.environ.get('MONGODB_PWD')
+        self.client = pymongo.MongoClient(
+            host="mongodb://{server}:{port}/".format(
+                server=server,
+                port=port),
+            username=user,
+            password=pwd,
+            authSource='admin',
+            authMechanism='SCRAM-SHA-256')
 
-    def get_collections(self):
-        db = mongo_client[DBNAME]
-        collections = db.list_collection_names()
-        print(collections)
-        return collections
+    def __del__(self):
+        self.client.close()
 
-    def get_raw(self):
-        data = self.collection.find({}, {"_id": 0, "transitions": 0})
-        ret = dict()
-        for x in data:
-            ret.update(x)
-        return ret
+    @property
+    def db(self):
+        return self.client[DBNAME]
+
+    @property
+    def states(self):
+        return self.client[DBNAME][STATE_COLLECTION]
+
+    @property
+    def transitions(self):
+        return self.client[DBNAME][TRANSITION_COLLECTION]
 
     def insert_zones(self, zones):
         result = self.states.insert_many(zones)
-        print(result)
-
-    def print_this(self, collection, query, qfilter=None):
-        doc = self.get_this(collection, query, qfilter)
-        for x in doc:
-            print(x)
-
-    def get_this(self, collection, query, qfilter=None):
-        if qfilter:
-            doc = collection.find(query, qfilter)
-        else:
-            doc = collection.find(query)
-        return doc
+        debug_print(result)
 
     def get_zone_states(self):
-        states = self.states.find()
-        return self.to_list(states)
+        s = self.states.find()
+        return self.to_list(s)
 
     def to_list(self, cursor):
         ret = list()
@@ -79,25 +65,25 @@ class MongoManager(object):
     def set_state(self, zone, state):
         query = {"_id": zone}
         new = {"$set": {"state": state}}
-        self.print_this(self.states, query)
+        print_this(self.states, query)
         result = self.states.update_one(query, new)
-        self.print_this(self.states, query)
+        print_this(self.states, query)
 
     def add_start_transition(self, zone):
         query = {"zone_id": zone, "start": datetime.datetime.utcnow()}
 
-        self.print_this(self.transitions, query)
+        print_this(self.transitions, query)
         self.transitions.insert_one(query)
-        self.print_this(self.transitions, query)
+        print_this(self.transitions, query)
 
     def add_stop_transition(self, zone):
         now = datetime.datetime.utcnow()
         query = {"zone_id": zone, "stop": {"$exists": False}}
         new = {"$set": {"stop": now}}
 
-        self.print_this(self.transitions, query)
+        print_this(self.transitions, query)
         result = self.transitions.update_one(query, new)
-        self.print_this(self.transitions, {"zone_id": zone, "stop": now})
+        print_this(self.transitions, {"zone_id": zone, "stop": now})
 
     def remove_transitions(self, query):
         self.transitions.delete_many(query)
@@ -117,7 +103,7 @@ class MongoManager(object):
         updated = self.set_temp_stop()
 
         pipeline = [
-            { "$match": { "start": { "$gt": dayago } } },
+            {"$match": {"start": {"$gt": dayago}}},
             {"$group":
                 {
                     "_id": "$zone_id",
@@ -137,7 +123,7 @@ class MongoManager(object):
         cursor = self.transitions.aggregate(pipeline)
         res = dict()
         for doc in cursor:
-            print(doc)
+            debug_print(doc)
             res[doc["_id"]] = doc['total_seconds']
         self.remove_stops(updated)
         return res
@@ -162,7 +148,7 @@ class MongoManager(object):
         ]
         res = self.transitions.aggregate(pipeline)
         for x in res:
-            print(x)
+            debug_print(x)
             return x["total_seconds"]
 
     def get_all_zone_runtimes(self):
@@ -188,7 +174,7 @@ class MongoManager(object):
         ret = list()
         ret_dict = dict()
         for x in res:
-            print(x)
+            debug_print(x)
             ret.append(x)
             ret_dict[x["_id"]] = x["total_seconds"]
 
@@ -218,3 +204,22 @@ class MongoManager(object):
         for d in doc_list:
             query = {"_id": d["_id"]}
             self.transitions.update_one(query, update)
+
+
+def debug_print(stuff):
+    if DEBUG:
+        print(stuff)
+
+
+def print_this(collection, query, qfilter=None):
+    doc = get_this(collection, query, qfilter)
+    for x in doc:
+        debug_print(x)
+
+
+def get_this(collection, query, qfilter=None):
+    if qfilter:
+        doc = collection.find(query, qfilter)
+    else:
+        doc = collection.find(query)
+    return doc

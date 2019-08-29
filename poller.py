@@ -1,17 +1,11 @@
 import os
 import time
-import datetime
 import json
 import subprocess
 import mongo_manager
 
 
-DB_NAME = 'heatdb'
-STATS_KEY = 'stats'
-TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
-DEBUG_STATUS = 'USB 1024LS Device is found! \nPORTA: 0\nPORTB: 0'
-
-
+# DEBUG_STATUS = 'USB 1024LS Device is found! \nPORTA: 0\nPORTB: 0'
 MONGO = mongo_manager.MongoManager()
 
 
@@ -29,57 +23,8 @@ def main():
         time.sleep(2)
 
 
-# def get_stats():
-#     # stats =
-#     # {
-#     #     "Apt Bedroom": {
-#     #         "state": "1",
-#     #         "transitions": [
-#     #             [
-#     #                 "09-26-2014 16:34:22",
-#     #                 "09-26-2014 16:34:23"
-#     #             ],
-#     #             [
-#     #                 "09-26-2014 16:44:22",
-#     #                 "09-26-2014 16:44:23]"
-#     #             ]
-#     #         ]
-#     #     }
-#     # }
-#
-#     # zone_state
-#     # { "_id" : "Apt Bedroom", "state" : "1" }
-#     # { "_id" : "Apt Living Room", "state" : "0" }
-#
-#     # transitions
-#     # { "_id" : ObjectId("5d6435b1a2fe5a3cc3fcb68b"), "zone_id" : "apt bedroom" }
-#
-#
-#
-#     return MONGO.get_raw()
-
-
-
 def get_state():
     return MONGO.get_zone_states()
-
-
-def init_stats(zones):
-    known_zones = MONGO.get_zone_states()
-    # look for changes in zone layout
-    diddled = 0
-    insert = list()
-    for z in known_zones:
-
-        for zone in zones:
-            if zone in z:
-                pass
-            else:
-                diddled = 1
-
-    if diddled:
-        MONGO.insert_zones(insert)
-    return known_zones
 
 
 def init_zones(zones):
@@ -102,9 +47,9 @@ def init_transitions():
     MONGO.remove_dangling()
 
 
-def list_to_dict(list):
+def list_to_dict(some_list):
     ret = dict()
-    for i in list:
+    for i in some_list:
         ret[i["_id"]] = i["state"]
     return ret
 
@@ -150,7 +95,7 @@ def translate_to_zones(zones, heat_bits):
 
 
 def get_port_status():
-    if os.environ.get('DEBUGGER'):
+    if os.environ.get('DEBUG'):
         try:
             with open('portstatusdebug') as f:
                 debug_status = f.read()
