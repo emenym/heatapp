@@ -11,24 +11,21 @@ app = Flask(__name__)
 
 @app.route("/chart")
 def chart():
-    stats = poller.get_stats()
     values = []
-    runtimes = []
-    day_values = []
-    labels = list(stats.keys())
+    labels = list()
+    state = poller.get_state()
+    for s in state:
+        labels.append(s["_id"])
+
+    runtimes = get_total_uptime(labels)
+    day_values = get_day_uptime(labels)
     for z in labels:
-        values.append(get_latest_uptime(z, stats))
-        runtimes.append(get_total_uptime(z, stats))
-        day_values.append(get_day_uptime(z, stats))
+        values.append(get_latest_uptime(z))
     return render_template("chart.html",
                            labels=labels,
                            values=values,
                            runtimes=runtimes,
                            day_values=day_values)
-
-
-def get_port_state_redis():
-    stats = poller.get_stats()
 
 
 # TODO get heatbits from redis instead of mccdaq
@@ -46,47 +43,42 @@ def heat():
 
 
 def date_range_to_seconds(d1, d2):
-    d1 = datetime.datetime.strptime(d1, poller.TIME_FORMAT)
-    d2 = datetime.datetime.strptime(d2, poller.TIME_FORMAT)
-
     delta = d2 - d1
     return delta.total_seconds()
 
 
-def get_latest_uptime(z, stats):
-    all_trans = stats[z]['transitions']
-    if not all_trans:
+def get_latest_uptime(z):
+    latest = poller.MONGO.get_latest_transition(z)
+    if not latest:
         return 0
-
-    latest_transition = all_trans[-1]
-    if len(latest_transition) > 1:
+    if latest.get("stop"):
         return 0
-
+    latest_transition = [latest["start"]]
     return get_uptime([latest_transition])
 
 
-def get_total_uptime(z, stats):
-    all_trans = stats[z]['transitions']
-    if not all_trans:
-        return 0
-
-    return get_uptime(all_trans)
+def get_total_uptime(labels):
+    zone_uptime = poller.MONGO.get_all_zone_runtimes()
+    zone_uptime = insert_missing(zone_uptime, labels)
+    return zone_uptime
 
 
-def get_day_uptime(z, stats):
-    all_trans = stats[z]['transitions']
-    if not all_trans:
-        return 0
+def insert_missing(uptimes, labels):
+    newlist = list()
 
-    dayago = datetime.datetime.now() - datetime.timedelta(hours=24)
-    day_transitions = []
-
-    for trans in reversed(all_trans):
-        if datetime.datetime.strptime(trans[0], poller.TIME_FORMAT) > dayago:
-            day_transitions.append(trans)
+    for l in labels:
+        if l in uptimes:
+            newlist.append(uptimes.get(l))
         else:
-            break
-    return get_uptime(day_transitions)
+            newlist.append(0)
+
+    return newlist
+
+
+def get_day_uptime(labels):
+    dayago = poller.MONGO.get_day_ago()
+    dayago = insert_missing(dayago, labels)
+    return dayago
 
 
 def get_uptime(tranision_list):
@@ -95,8 +87,7 @@ def get_uptime(tranision_list):
         if len(transition) > 1:
             uptime += date_range_to_seconds(transition[0], transition[1])
         else:
-            uptime += date_range_to_seconds(transition[0],
-                                            datetime.datetime.now().strftime(poller.TIME_FORMAT))
+            uptime += date_range_to_seconds(transition[0],datetime.datetime.utcnow())
 
     return uptime
 

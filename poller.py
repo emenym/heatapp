@@ -1,26 +1,26 @@
 import os
 import time
 import datetime
-import redis
 import json
 import subprocess
+import mongo_manager
 
-redis_connection = redis.StrictRedis(host=os.environ.get("REDIS_HOST", "192.168.1.49"),
-                                     port=os.environ.get("REDIS_PORT", 6379),
-                                     password=os.environ.get("REDIS_AUTH", "biglongsuperfantasticpassword"),
-                                     charset="utf-8",
-                                     decode_responses=True)
 
+DB_NAME = 'heatdb'
 STATS_KEY = 'stats'
 TIME_FORMAT = "%m-%d-%Y %H:%M:%S"
 DEBUG_STATUS = 'USB 1024LS Device is found! \nPORTA: 0\nPORTB: 0'
+
+
+MONGO = mongo_manager.MongoManager()
 
 
 def main():
     zones = get_zones()
     port_status = parse_port_status(get_port_status())
     port_state = translate_to_zones(zones, port_status)
-    init_stats(port_state)
+    init_zones(port_state)
+    init_transitions()
 
     while True:
         port_status = parse_port_status(get_port_status())
@@ -29,89 +29,106 @@ def main():
         time.sleep(2)
 
 
-def get_stats():
-    # stats = {
-    #     'Apt Bedroom': {'state': '1',
-    #                     'transitions': [['09-26-2014 16:34:22', '09-26-2014 16:34:23'],
-    #                                     ['09-26-2014 16:44:22', '09-26-2014 16:44:23]'
-    #                                    ]
-    #                    }
-    # }
+# def get_stats():
+#     # stats =
+#     # {
+#     #     "Apt Bedroom": {
+#     #         "state": "1",
+#     #         "transitions": [
+#     #             [
+#     #                 "09-26-2014 16:34:22",
+#     #                 "09-26-2014 16:34:23"
+#     #             ],
+#     #             [
+#     #                 "09-26-2014 16:44:22",
+#     #                 "09-26-2014 16:44:23]"
+#     #             ]
+#     #         ]
+#     #     }
+#     # }
+#
+#     # zone_state
+#     # { "_id" : "Apt Bedroom", "state" : "1" }
+#     # { "_id" : "Apt Living Room", "state" : "0" }
+#
+#     # transitions
+#     # { "_id" : ObjectId("5d6435b1a2fe5a3cc3fcb68b"), "zone_id" : "apt bedroom" }
+#
+#
+#
+#     return MONGO.get_raw()
 
-    if os.environ.get('STAGING'):
-        global STATS_KEY
-        STATS_KEY = 'staging_stats'
-
-    raw = redis_connection.get(STATS_KEY)
-    if raw:
-        stats = json.loads(raw)
-    else:
-        stats = {}
-    return stats
 
 
-def save_stats(stats):
-    if os.environ.get('STAGING'):
-        global STATS_KEY
-        STATS_KEY = 'staging_stats'
-    redis_connection.set(STATS_KEY, json.dumps(stats))
+def get_state():
+    return MONGO.get_zone_states()
 
 
 def init_stats(zones):
-    init_dict = {'state': '0',
-                 'transitions': []
-                 }
-    stats = get_stats()
+    known_zones = MONGO.get_zone_states()
     # look for changes in zone layout
     diddled = 0
-    for zone in zones:
-        if zone in stats:
-            pass
-        else:
-            diddled = 1
-            stats[zone] = init_dict
+    insert = list()
+    for z in known_zones:
+
+        for zone in zones:
+            if zone in z:
+                pass
+            else:
+                diddled = 1
 
     if diddled:
-        save_stats(stats)
-    return stats
+        MONGO.insert_zones(insert)
+    return known_zones
+
+
+def init_zones(zones):
+    insert = list()
+    known_zones = list()
+
+    for zone_dict in MONGO.get_zone_states():
+        known_zones.append(zone_dict["_id"])
+
+    for zone in zones:
+        if zone not in known_zones:
+            insert.append({"_id": zone, "state": zones[zone]})
+
+    if insert:
+        MONGO.insert_zones(insert)
+
+
+def init_transitions():
+    # remove transitions without stop time
+    MONGO.remove_dangling()
+
+
+def list_to_dict(list):
+    ret = dict()
+    for i in list:
+        ret[i["_id"]] = i["state"]
+    return ret
 
 
 def do_metrics(current_state):
 
-    stats = get_stats()
-    now = datetime.datetime.now()
+    saved_state = list_to_dict(MONGO.get_zone_states())
 
-    for zone in stats:
-        if current_state[zone] == stats[zone]['state'] == '0':
+    for zone in saved_state:
+        if current_state[zone] == saved_state[zone]:
             # stayed off
             pass
 
-        elif current_state[zone] == '1' and stats[zone]['state'] == '0':
+        elif current_state[zone] == '1' and saved_state[zone] == '0':
             # turned on
-            stats[zone]["state"] = "1"
-            stats[zone]["transitions"].append([now.strftime(TIME_FORMAT)])
+            MONGO.turn_on(zone)
 
-        elif current_state[zone] == '0' and stats[zone]['state'] == '1':
+        elif current_state[zone] == '0' and saved_state[zone] == '1':
             # turned off
-            stats[zone]["state"] = "0"
+            MONGO.turn_off(zone)
 
-            try:
-                latest_transition = stats[zone]["transitions"].pop()
-            except IndexError:
-                # turn on transition not recorded, do nothing
-                return
-            if not latest_transition:
-                # transition is empty, discard it
-                return
-
-            latest_transition.append(now.strftime(TIME_FORMAT))
-            stats[zone]["transitions"].append(latest_transition)
-
-        elif current_state[zone] == '1' and stats[zone]['state'] == '1':
+        elif current_state[zone] == '1' and saved_state[zone] == '1':
             # stayed on
             pass
-
-    save_stats(stats)
 
 
 def translate_to_zones(zones, heat_bits):
@@ -134,7 +151,14 @@ def translate_to_zones(zones, heat_bits):
 
 def get_port_status():
     if os.environ.get('DEBUGGER'):
-        return DEBUG_STATUS
+        try:
+            with open('portstatusdebug') as f:
+                debug_status = f.read()
+                return debug_status
+        except FileNotFoundError as fnf:
+            print(fnf)
+            exit(-1)
+
     cmd = 'mccdaq/get_heat'
     completed = subprocess.run(cmd, stdout=subprocess.PIPE)
     out = completed.stdout.decode('utf-8')
