@@ -2,7 +2,7 @@ import os
 import pymongo
 import datetime
 
-
+DB_HOST = os.environ.get('MONGODB_HOST', '127.0.0.1')
 STAGING_DB = 'staging'
 DBNAME = 'heatdb'
 if os.environ.get('STAGING'):
@@ -13,7 +13,7 @@ DEBUG = os.environ.get('DEBUG', None)
 
 
 class MongoManager(object):
-    def __init__(self, server='127.0.0.1', port=27017):
+    def __init__(self, server=DB_HOST, port=27017):
         user = os.environ.get('MONGODB_USER', 'heatapp')
         pwd = os.environ.get('MONGODB_PWD')
         self.client = pymongo.MongoClient(
