@@ -107,6 +107,14 @@ def get_port_status():
     cmd = 'mccdaq/get_heat'
     completed = subprocess.run(cmd, stdout=subprocess.PIPE)
     out = completed.stdout.decode('utf-8')
+    i = 0
+    while 'NOT' in out:
+        completed = subprocess.run(cmd, stdout=subprocess.PIPE)
+        out = completed.stdout.decode('utf-8')
+        i += 1
+        if i >= 10:
+            raise Exception('Error retrieving data from mccdaq')
+        time.sleep(1)
     print(out)
     return out
 
