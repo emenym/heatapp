@@ -108,7 +108,8 @@ def get_port_status():
     completed = subprocess.run(cmd, stdout=subprocess.PIPE)
     out = completed.stdout.decode('utf-8')
     i = 0
-    while 'NOT' in out:
+    out = 'USB 1024LS and USB 1024HLS not found.'
+    while 'NOT' in out or 'not' in out:
         completed = subprocess.run(cmd, stdout=subprocess.PIPE)
         out = completed.stdout.decode('utf-8')
         i += 1
