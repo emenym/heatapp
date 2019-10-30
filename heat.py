@@ -31,13 +31,11 @@ def chart():
 # TODO get heatbits from redis instead of mccdaq
 @app.route("/")
 def heat():
-    zones = poller.get_zones()
-    heat_bits = poller.parse_port_status(poller.get_port_status())
-    zone_list = poller.translate_to_zones(zones, heat_bits)
+    zone_list = {}
+    for i in poller.MONGO.get_zone_states():
+        zone_list[i['_id']] = i['state']
     return render_template(
         'index.html',
-        porta=heat_bits['PORTA'],
-        portb=heat_bits['PORTB'],
         zone_list=zone_list
     )
 
