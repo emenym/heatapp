@@ -3,22 +3,23 @@ import time
 import json
 import subprocess
 import mongo_manager
-
+import lib16inpind
 
 # DEBUG_STATUS = 'USB 1024LS Device is found! \nPORTA: 0\nPORTB: 0'
 MONGO = mongo_manager.MongoManager()
-
+ZONE_MAP = 'input_map.json'
+STACK = 0
 
 def main():
     zones = get_zones()
-    port_status = parse_port_status(get_port_status())
-    port_state = translate_to_zones(zones, port_status)
+    port_status = get_pi_port_status()
+    port_state = translate_pi_to_zones(zones, port_status)
     init_zones(port_state)
     init_transitions()
 
     while True:
-        port_status = parse_port_status(get_port_status())
-        port_state = translate_to_zones(zones, port_status)
+        port_status = get_pi_port_status()
+        port_state = translate_pi_to_zones(zones, port_status)
         do_metrics(port_state)
         time.sleep(2)
 
@@ -90,18 +91,33 @@ def translate_to_zones(zones, heat_bits):
     heat_dict = {}
     for z in zones['PORTA']:
         big_end = heat_bits['PORTA'][::-1]
-        if big_end[int(z)] is "1":
+        if big_end[int(z)] == "1":
             heat_dict[zones['PORTA'][z]] = "1"
         else:
             heat_dict[zones['PORTA'][z]] = "0"
 
     for z in zones['PORTB']:
         big_end = heat_bits['PORTB'][::-1]
-        if big_end[int(z)] is "1":
+        if big_end[int(z)] == "1":
             heat_dict[zones['PORTB'][z]] = "1"
         else:
             heat_dict[zones['PORTB'][z]] = "0"
     return heat_dict
+
+def translate_pi_to_zones(zones, zone_state):
+    bits = format(int(zone_state), '0>' + str(len(zones.keys())) + 'b')
+    heat_dict = {}
+    num_zones = len(bits)
+    for i in range(0, num_zones):
+        idx = list(zones.values())[i]
+        heat_dict[idx] = bits[::-1][i]
+    return heat_dict
+
+
+def get_pi_port_status():
+    all_state = lib16inpind.readAll(STACK)
+    return all_state
+
 
 
 def get_port_status():
@@ -138,12 +154,15 @@ def parse_port_status(mccdaq_out):
         if line.startswith('PORTB'):
             ports_dict['PORTB'] = format(int(line.split()[1]), '0>8b')
     print(ports_dict)
+
+    # all_state = lib16inpind.readAll(STACK)
+    # return format(int(all_state), '0>20b')
     return ports_dict
 
 
 def get_zones():
     zones = {}
-    with open('zones.json') as f:
+    with open(ZONE_MAP) as f:
         zones = json.load(f)
     f.close()
     return zones

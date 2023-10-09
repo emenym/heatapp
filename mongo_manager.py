@@ -22,7 +22,8 @@ class MongoManager(object):
                 port=port),
             username=user,
             password=pwd,
-            authSource='admin',
+            # authSource='admin',
+            authSource=DBNAME,
             authMechanism='SCRAM-SHA-256')
 
     def __del__(self):
@@ -43,6 +44,11 @@ class MongoManager(object):
     def insert_zones(self, zones):
         result = self.states.insert_many(zones)
         debug_print(result)
+
+    def remove_zones(self, zones):
+        result = self.states.delete_many(zones)
+        debug_print(result)
+
 
     def get_zone_states(self):
         s = self.states.find()
