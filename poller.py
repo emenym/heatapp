@@ -59,6 +59,16 @@ def do_metrics(current_state):
     saved_state = list_to_dict(MONGO.get_zone_states())
 
     for zone in saved_state:
+        if (zone not in current_state):
+            # zone was removed
+            if saved_state[zone] == '1':
+                # was still on
+                MONGO.turn_off(zone)
+
+            # remove zone from state db
+            MONGO.remove_zones({"_id": zone})
+            continue
+
         if current_state[zone] == saved_state[zone]:
             # stayed off
             pass
