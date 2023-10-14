@@ -1,12 +1,14 @@
 [Unit]
 Description=Polling service for Heat
-After=multi-user.target
+Requires=heat-poller.service
+After=heat-poller.service
 
 [Service]
 Type=simple
-WorkingDirectory=/var/heatapp
-ExecStart=/usr/bin/python3 /var/heatapp/poller.py > /var/heatapp/log.log 2>&1
+WorkingDirectory=/home/mike/heatapp
+ExecStart=/home/mike/heatapp/.venv/bin/flask run --host=0.0.0.0 --port=80
 Environment=PORT=80
-
+Environment=FLASK_APP=heat
+Environment=MONGODB_PWD=idunnosomething
 [Install]
 WantedBy=multi-user.target
