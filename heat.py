@@ -32,7 +32,8 @@ def chart():
 @app.route("/")
 def heat():
     zone_list = {}
-    for i in poller.MONGO.get_zone_states():
+    zone_states = poller.MONGO.get_zone_states()
+    for i in zone_states:
         zone_list[i['_id']] = i['state']
     return render_template(
         'index.html',
