@@ -1,14 +1,15 @@
 {
-    "0":"Apt Bedroom",
+    "0": "Apt Bedroom",
     "1": "Apt Living Room",
     "2": "Apt Bath Room",
     "3": "Mike's Office",
-    "4": "Mom's Office",
-    "5": "Danielle's Office",
-    "6": "Family Room",
-    "7": "Dining Room",
-    "8": "Living Room",
-    "9": "Upstairs Bath Room",
-    "10": "Master Bedroom",
-    "11": "Dad's Office"
+    "4": "Danielle's Office",
+    "5": "Family Room",
+    "6": "Sue's Office",
+    "7": "Nothing",
+    "8": "Dining Room",
+    "9": "Living Room",
+    "10": "Upstairs Bathroom",
+    "11": "Bill's Office",
+    "12": "Master Bedroom"
 }
