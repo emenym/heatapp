@@ -1,0 +1,13 @@
+[Unit]
+Description=Polling service for Heat
+Requires=mongo.service
+After=mongo.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/mike/heatapp
+ExecStart=/home/mike/heatapp/.venv/bin/python3 /home/mike/heatapp/poller.py > /home/mike/heatapp/log.log 2>&1
+Environment=PORT=80
+Environment=MONGODB_PWD={{ mongodb_pwd }}
+[Install]
+WantedBy=multi-user.target

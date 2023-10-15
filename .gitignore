@@ -3,3 +3,6 @@
 
 /mccdaq/get_heat
 .idea/
+
+.venv/
+data/

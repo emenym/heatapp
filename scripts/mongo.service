@@ -1,0 +1,13 @@
+[Unit]
+Description=MongoDB container
+Requires=docker.service
+After=docker.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/docker compose -f /home/mike/heatapp/docker-compose.yml up
+ExecStop=/usr/bin/docker compose -f /home/mike/heatapp/docker-compose.yml down
+WorkingDirectory=/home/mike/heatapp
+
+[Install]
+WantedBy=multi-user.target
