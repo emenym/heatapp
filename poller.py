@@ -110,6 +110,8 @@ def translate_pi_to_zones(zones, zone_state):
     num_zones = len(bits)
     for i in range(0, num_zones):
         idx = list(zones.values())[i]
+        if idx == None:
+            continue
         heat_dict[idx] = bits[::-1][i]
     return heat_dict
 
