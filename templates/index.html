@@ -4,7 +4,7 @@
 
 {% block head %}
     {{ super() }}
-    <meta http-equiv="refresh" content="60" >
+    <!-- <meta http-equiv="refresh" content="60" > -->
 {% endblock %}
 
 {% block nav_items %}
@@ -31,4 +31,24 @@
       </tbody>
   </table>
 </div>
+<script>
+    $(document).ready(function(){
+        setInterval(function(){
+            $.ajax({
+                url: '/update_zone_list',  // the endpoint
+                type: 'GET',  // http method
+                success: function(data) {
+                    console.log("got updated zone list:",data);
+                    zone_list = data;
+
+                    // this is where you update your table with new data
+                    // you need to parse the data and update the HTML of your table
+                },
+                error: function(error) {
+                    console.log(error);
+                }
+            });
+        }, 10000);  // 60000 milliseconds = 60 seconds     
+    });
+    </script>
 {% endblock %}

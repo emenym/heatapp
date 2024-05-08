@@ -14,7 +14,7 @@
     "configurations": [
         {
             "name": "Python: Flask",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "flask",
             "env": {
@@ -25,8 +25,8 @@
             },
             "args": [
                 "run",
-                "--no-debugger",
-                "--no-reload",
+                // "--no-debugger",
+                // "--no-reload", // doesnt seem to like working along side another instance
                 "--host=0.0.0.0"
             ],
             "jinja": true,
@@ -34,7 +34,7 @@
         },
         {
             "name": "poller",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/poller.py",
             "console": "integratedTerminal",
@@ -46,7 +46,7 @@
         },
         {
             "name": "Python: Current File",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
