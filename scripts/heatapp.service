@@ -10,5 +10,7 @@ ExecStart=/home/mike/heatapp/.venv/bin/flask run --host=0.0.0.0 --port=80
 Environment=PORT=80
 Environment=FLASK_APP=heat
 Environment=MONGODB_PWD=idunnosomething
+Restart=on-failure
+
 [Install]
 WantedBy=multi-user.target

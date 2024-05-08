@@ -2,6 +2,7 @@
 Description=Polling service for Heat
 Requires=mongo.service
 After=mongo.service
+Restart=on-failure
 
 [Service]
 Type=simple
