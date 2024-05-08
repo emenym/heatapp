@@ -1,6 +1,6 @@
 import os
 import datetime
-from flask import Flask
+from flask import Flask, jsonify
 from flask import render_template
 
 import poller
@@ -11,6 +11,15 @@ app = Flask(__name__)
 
 @app.route("/chart")
 def chart():
+    chart_data = get_all_chart_data()
+    return render_template("chart.html",
+                           labels=chart_data.get("labels"),
+                            values=chart_data.get("values"),
+                            runtimes=chart_data.get("runtimes"),
+                            day_values=chart_data.get("day_values"))
+
+
+def get_all_chart_data():
     values = []
     labels = list()
     state = poller.get_state()
@@ -21,14 +30,61 @@ def chart():
     day_values = get_day_uptime(labels)
     for z in labels:
         values.append(get_latest_uptime(z))
-    return render_template("chart.html",
-                           labels=labels,
-                           values=values,
-                           runtimes=runtimes,
-                           day_values=day_values)
+    return {
+        "labels": labels,
+        "values": values,
+        "runtimes": runtimes,
+        "day_values": day_values
+    }
+
+@app.route('/get_current_uptime_chart_data', methods=['GET'])
+def get_current_uptime_chart_data():
+    values = []
+    labels = list()
+    state = poller.get_state()
+    for s in state:
+        labels.append(s["_id"])
+
+    for z in labels:
+        values.append(get_latest_uptime(z))
+    return {
+        "labels": labels,
+        "values": values
+    }
+
+@app.route('/get_day_uptime_chart_data', methods=['GET'])
+def get_day_uptime_chart_data():
+    labels = list()
+    state = poller.get_state()
+    for s in state:
+        labels.append(s["_id"])
+
+    day_values = get_day_uptime(labels)
+    return {
+        "labels": labels,
+        "day_values": day_values
+    }
+
+@app.route('/get_total_uptime_chart_data', methods=['GET'])
+def get_total_uptime_chart_data():
+    labels = list()
+    state = poller.get_state()
+    for s in state:
+        labels.append(s["_id"])
+
+    runtimes = get_total_uptime(labels)
+    return {
+        "labels": labels,
+        "runtimes": runtimes
+    }
 
 
-# TODO get heatbits from redis instead of mccdaq
+@app.route('/update_chart_data', methods=['GET'])
+def update_chart_data():
+    chart_data = get_all_chart_data()
+    return jsonify(chart_data)
+
+
 @app.route("/")
 def heat():
     zone_list = {}
@@ -40,6 +96,13 @@ def heat():
         zone_list=zone_list
     )
 
+@app.route('/update_zone_list', methods=['GET'])
+def update_zone_list():
+    zone_list = {}
+    zone_states = poller.MONGO.get_zone_states()
+    for i in zone_states:
+        zone_list[i['_id']] = i['state']
+    return jsonify(zone_list)
 
 def date_range_to_seconds(d1, d2):
     delta = d2 - d1
