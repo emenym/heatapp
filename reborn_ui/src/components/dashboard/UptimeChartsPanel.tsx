@@ -4,7 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
+  Rectangle,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -60,7 +60,7 @@ function ChartPanel({ title, metric }: ChartPanelProps) {
       <CardContent>
         <div className="h-[280px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rows} margin={{ top: 8, right: 8, left: 8, bottom: 30 }}>
+            <BarChart data={rows} margin={{ top: 8, right: 8, left: 20, bottom: 30 }}>
               <CartesianGrid stroke="rgba(148, 163, 184, 0.22)" strokeDasharray="3 3" />
               <XAxis
                 dataKey="zone"
@@ -71,13 +71,15 @@ function ChartPanel({ title, metric }: ChartPanelProps) {
                 height={58}
               />
               <YAxis
+                width={92}
                 tick={{ fill: "#cbd5e1", fontSize: 12 }}
                 tickFormatter={(value: number) => formatSeconds(value)}
                 label={{
                   value: "Uptime in Seconds",
                   angle: -90,
                   position: "insideLeft",
-                  fill: "#93c5fd",
+                  offset: -2,
+                  style: { fill: "#93c5fd", textAnchor: "middle" },
                 }}
               />
               <Tooltip
@@ -95,11 +97,13 @@ function ChartPanel({ title, metric }: ChartPanelProps) {
                 labelStyle={{ color: "#f8fafc", fontWeight: 600 }}
                 itemStyle={{ color: "#f8fafc" }}
               />
-              <Bar dataKey="seconds" name="Uptime" radius={[6, 6, 0, 0]}>
-                {rows.map((entry) => (
-                  <Cell key={entry.zone} fill={entry.color} />
-                ))}
-              </Bar>
+              <Bar
+                dataKey="seconds"
+                name="Uptime"
+                shape={(props) => (
+                  <Rectangle {...props} fill={props.payload?.color ?? "#f59e0b"} radius={[6, 6, 0, 0]} />
+                )}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>

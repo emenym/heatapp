@@ -6,7 +6,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
+  Rectangle,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -189,11 +189,14 @@ export function ZoneDayTimelinePanel() {
                 }}
               />
               <Bar dataKey="start" stackId="timeline" fill="rgba(0,0,0,0)" isAnimationActive={false} />
-              <Bar dataKey="duration" stackId="timeline" radius={[6, 6, 6, 6]} isAnimationActive={false}>
-                {rows.map((row) => (
-                  <Cell key={row.id} fill={row.color} />
-                ))}
-              </Bar>
+              <Bar
+                dataKey="duration"
+                stackId="timeline"
+                isAnimationActive={false}
+                shape={(props) => (
+                  <Rectangle {...props} fill={props.payload?.color ?? "#f59e0b"} radius={[6, 6, 6, 6]} />
+                )}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
