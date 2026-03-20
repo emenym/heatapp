@@ -1,6 +1,47 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
-const sortByPortBit = (a, b) => {
+type Port = "PORTA" | "PORTB" | string;
+
+type Zone = {
+  port: Port;
+  bit: number;
+  zone_key: string;
+  zone_name: string;
+  state: string;
+  current_uptime: number;
+  day_uptime: number;
+  total_uptime: number;
+};
+
+type MappingItem = {
+  port: Port;
+  bit: number;
+  zone_key: string;
+  zone_name: string;
+  enabled: boolean;
+};
+
+type ZonesResponse = {
+  zones?: Zone[];
+};
+
+type MappingResponse = {
+  mapping?: MappingItem[];
+};
+
+type RenameErrorResponse = {
+  error?: string;
+};
+
+type MapFormState = {
+  port: Port;
+  bit: number;
+  zone_key: string;
+  zone_name: string;
+  enabled: boolean;
+};
+
+const sortByPortBit = <T extends { port: Port; bit: number }>(a: T, b: T): number => {
   if (a.port === b.port) {
     return a.bit - b.bit;
   }
@@ -8,12 +49,12 @@ const sortByPortBit = (a, b) => {
 };
 
 function App() {
-  const [zones, setZones] = useState([]);
-  const [mapping, setMapping] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [renameDraft, setRenameDraft] = useState({});
-  const [mapForm, setMapForm] = useState({
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [mapping, setMapping] = useState<MappingItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>("");
+  const [renameDraft, setRenameDraft] = useState<Record<string, string>>({});
+  const [mapForm, setMapForm] = useState<MapFormState>({
     port: "PORTA",
     bit: 0,
     zone_key: "",
@@ -24,13 +65,10 @@ function App() {
   const zoneCount = zones.length;
   const onlineCount = useMemo(() => zones.filter((z) => z.state === "1").length, [zones]);
 
-  const fetchAll = async () => {
+  const fetchAll = async (): Promise<void> => {
     setError("");
     try {
-      const [zonesRes, mapRes] = await Promise.all([
-        fetch("/api/zones"),
-        fetch("/api/mapping"),
-      ]);
+      const [zonesRes, mapRes] = await Promise.all([fetch("/api/zones"), fetch("/api/mapping")]);
 
       if (!zonesRes.ok) {
         throw new Error("Failed to load zones");
@@ -39,12 +77,12 @@ function App() {
         throw new Error("Failed to load mapping");
       }
 
-      const zonesData = await zonesRes.json();
-      const mapData = await mapRes.json();
+      const zonesData: ZonesResponse = await zonesRes.json();
+      const mapData: MappingResponse = await mapRes.json();
       setZones((zonesData.zones || []).slice().sort(sortByPortBit));
       setMapping((mapData.mapping || []).slice().sort(sortByPortBit));
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : "Unexpected error");
     } finally {
       setLoading(false);
     }
@@ -52,21 +90,23 @@ function App() {
 
   useEffect(() => {
     fetchAll();
-    const id = setInterval(fetchAll, 10000);
+    const id = setInterval(() => {
+      void fetchAll();
+    }, 10000);
     return () => clearInterval(id);
   }, []);
 
-  const doPoll = async () => {
+  const doPoll = async (): Promise<void> => {
     setError("");
     const res = await fetch("/api/poll", { method: "POST" });
     if (!res.ok) {
       setError("Poll request failed");
       return;
     }
-    fetchAll();
+    void fetchAll();
   };
 
-  const submitRename = async (zoneKey) => {
+  const submitRename = async (zoneKey: string): Promise<void> => {
     const zoneName = (renameDraft[zoneKey] || "").trim();
     if (!zoneName) {
       setError("Rename requires a non-empty zone_name");
@@ -80,16 +120,16 @@ function App() {
     });
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
+      const body: RenameErrorResponse = await res.json().catch(() => ({} as RenameErrorResponse));
       setError(body.error || "Rename failed");
       return;
     }
 
     setRenameDraft((prev) => ({ ...prev, [zoneKey]: "" }));
-    fetchAll();
+    void fetchAll();
   };
 
-  const submitMapping = async (e) => {
+  const submitMapping = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setError("");
 
@@ -108,13 +148,13 @@ function App() {
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
+      const data: RenameErrorResponse = await res.json().catch(() => ({} as RenameErrorResponse));
       setError(data.error || "Mapping update failed");
       return;
     }
 
     setMapForm((prev) => ({ ...prev, zone_name: "", zone_key: "" }));
-    fetchAll();
+    void fetchAll();
   };
 
   return (
@@ -134,7 +174,7 @@ function App() {
             <span>Active</span>
             <strong>{onlineCount}</strong>
           </div>
-          <button onClick={doPoll}>Poll Now</button>
+          <button onClick={() => void doPoll()}>Poll Now</button>
         </div>
       </header>
 
@@ -179,7 +219,7 @@ function App() {
                           onChange={(e) => setRenameDraft((prev) => ({ ...prev, [zone.zone_key]: e.target.value }))}
                           placeholder="New name"
                         />
-                        <button onClick={() => submitRename(zone.zone_key)}>Save</button>
+                        <button onClick={() => void submitRename(zone.zone_key)}>Save</button>
                       </div>
                     </td>
                   </tr>
@@ -191,7 +231,7 @@ function App() {
 
         <section className="panel">
           <h2>Hardware Map</h2>
-          <form className="mapping-form" onSubmit={submitMapping}>
+          <form className="mapping-form" onSubmit={(e) => void submitMapping(e)}>
             <label>
               Port
               <select value={mapForm.port} onChange={(e) => setMapForm((p) => ({ ...p, port: e.target.value }))}>
@@ -201,18 +241,36 @@ function App() {
             </label>
             <label>
               Bit
-              <input type="number" min="0" max="7" value={mapForm.bit} onChange={(e) => setMapForm((p) => ({ ...p, bit: e.target.value }))} />
+              <input
+                type="number"
+                min="0"
+                max="7"
+                value={mapForm.bit}
+                onChange={(e) => setMapForm((p) => ({ ...p, bit: Number(e.target.value) }))}
+              />
             </label>
             <label>
               Zone Key (optional)
-              <input value={mapForm.zone_key} onChange={(e) => setMapForm((p) => ({ ...p, zone_key: e.target.value }))} placeholder="PORTA:3" />
+              <input
+                value={mapForm.zone_key}
+                onChange={(e) => setMapForm((p) => ({ ...p, zone_key: e.target.value }))}
+                placeholder="PORTA:3"
+              />
             </label>
             <label>
               Zone Name (required for new key)
-              <input value={mapForm.zone_name} onChange={(e) => setMapForm((p) => ({ ...p, zone_name: e.target.value }))} placeholder="Studio" />
+              <input
+                value={mapForm.zone_name}
+                onChange={(e) => setMapForm((p) => ({ ...p, zone_name: e.target.value }))}
+                placeholder="Studio"
+              />
             </label>
             <label className="check">
-              <input type="checkbox" checked={mapForm.enabled} onChange={(e) => setMapForm((p) => ({ ...p, enabled: e.target.checked }))} />
+              <input
+                type="checkbox"
+                checked={mapForm.enabled}
+                onChange={(e) => setMapForm((p) => ({ ...p, enabled: e.target.checked }))}
+              />
               Enabled
             </label>
             <button type="submit">Apply Mapping Change</button>
