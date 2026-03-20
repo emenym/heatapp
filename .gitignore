@@ -8,3 +8,7 @@
 data/
 reborn_data/
 reborn_ui/node_modules/
+
+# reborn_ui build artifacts
+reborn_ui/dist/
+reborn_ui/tsconfig.tsbuildinfo
