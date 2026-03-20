@@ -59,8 +59,13 @@ function ChartPanel({ title, metric }: ChartPanelProps) {
       </CardHeader>
       <CardContent>
         <div className="h-[280px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rows} margin={{ top: 8, right: 8, left: 20, bottom: 30 }}>
+          <ResponsiveContainer width="100%" height="100%" className="focus:outline-none">
+            <BarChart
+              data={rows}
+              margin={{ top: 8, right: 8, left: 20, bottom: 30 }}
+              tabIndex={-1}
+              style={{ outline: "none" }}
+            >
               <CartesianGrid stroke="rgba(148, 163, 184, 0.22)" strokeDasharray="3 3" />
               <XAxis
                 dataKey="zone"
