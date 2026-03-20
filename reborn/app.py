@@ -1,3 +1,5 @@
+import datetime
+
 from flask import Flask, jsonify, request
 
 from reborn.config import DB_PATH, PORT, ZONE_SEED_PATH
@@ -129,6 +131,20 @@ def set_mapping():
         return jsonify({"error": str(exc)}), 400
 
     return jsonify({"updated": True})
+
+
+@app.route("/api/charts/day-timeline", methods=["GET"])
+def day_timeline_chart_data():
+    date_str = request.args.get("date")
+    if not date_str:
+        return jsonify(repo.day_timeline_segments())
+
+    try:
+        selected_date = datetime.date.fromisoformat(date_str)
+    except ValueError:
+        return jsonify({"error": "date must be YYYY-MM-DD"}), 400
+
+    return jsonify(repo.day_timeline_segments(selected_date))
 
 
 if __name__ == "__main__":

@@ -323,3 +323,93 @@ class RebornRepository:
                 continue
             out[row["zone_key"]] = out.get(row["zone_key"], 0) + int((seg_stop - seg_start).total_seconds())
         return out
+
+    def day_timeline_segments(self, target_date=None):
+        now = datetime.datetime.utcnow()
+        date_value = target_date or now.date()
+        day_start = datetime.datetime.combine(date_value, datetime.time.min)
+        day_end = day_start + datetime.timedelta(days=1)
+        is_today = date_value == now.date()
+        effective_end = now if is_today else day_end
+        out = []
+
+        with self.connect() as con:
+            rows = con.execute(
+                """
+                SELECT t.zone_key, z.zone_name, t.start_ts, t.stop_ts
+                FROM transitions t
+                JOIN zones z ON z.zone_key = t.zone_key
+                ORDER BY z.zone_name, t.start_ts
+                """
+            ).fetchall()
+            active_rows = []
+            if is_today:
+                active_rows = con.execute(
+                    """
+                    SELECT zs.zone_key, z.zone_name, zs.updated_at
+                    FROM zone_state zs
+                    JOIN zones z ON z.zone_key = zs.zone_key
+                    WHERE zs.state = '1'
+                    """
+                ).fetchall()
+
+        for row in rows:
+            start = datetime.datetime.fromisoformat(row["start_ts"].replace("Z", ""))
+            stop = row["stop_ts"]
+            stop_dt = datetime.datetime.fromisoformat(stop.replace("Z", "")) if stop else now
+
+            seg_start = max(start, day_start)
+            seg_stop = min(stop_dt, effective_end)
+            if seg_stop <= seg_start:
+                continue
+
+            start_seconds = int((seg_start - day_start).total_seconds())
+            end_seconds = int((seg_stop - day_start).total_seconds())
+
+            out.append(
+                {
+                    "zone_key": row["zone_key"],
+                    "zone_name": row["zone_name"],
+                    "start_seconds": start_seconds,
+                    "end_seconds": end_seconds,
+                    "duration_seconds": end_seconds - start_seconds,
+                }
+            )
+
+        open_zone_keys = {row["zone_key"] for row in rows if row["stop_ts"] is None}
+        for row in active_rows:
+            if row["zone_key"] in open_zone_keys:
+                continue
+
+            updated_at = datetime.datetime.fromisoformat(row["updated_at"].replace("Z", ""))
+            seg_start = max(updated_at, day_start)
+            seg_stop = effective_end
+            if seg_stop <= seg_start:
+                continue
+
+            start_seconds = int((seg_start - day_start).total_seconds())
+            end_seconds = int((seg_stop - day_start).total_seconds())
+            out.append(
+                {
+                    "zone_key": row["zone_key"],
+                    "zone_name": row["zone_name"],
+                    "start_seconds": start_seconds,
+                    "end_seconds": end_seconds,
+                    "duration_seconds": end_seconds - start_seconds,
+                }
+            )
+
+        out.sort(key=lambda item: (item["zone_name"], item["start_seconds"]))
+
+        if is_today:
+            now_seconds = int((effective_end - day_start).total_seconds())
+        else:
+            now_seconds = 86399
+
+        return {
+            "day_start": day_start.replace(microsecond=0).isoformat() + "Z",
+            "selected_date": date_value.isoformat(),
+            "is_today": is_today,
+            "now_seconds": max(0, min(86399, now_seconds)),
+            "segments": out,
+        }

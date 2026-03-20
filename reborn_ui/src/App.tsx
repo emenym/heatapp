@@ -2,6 +2,7 @@ import { DashboardProvider, useDashboardContext } from "@/components/dashboard/D
 import { HeroHeader } from "@/components/dashboard/HeroHeader";
 import { MappingPanel } from "@/components/dashboard/MappingPanel";
 import { UptimeChartsPanel } from "@/components/dashboard/UptimeChartsPanel";
+import { ZoneDayTimelinePanel } from "@/components/dashboard/ZoneDayTimelinePanel";
 import { ZonesPanel } from "@/components/dashboard/ZonesPanel";
 
 function DashboardView() {
@@ -16,6 +17,7 @@ function DashboardView() {
       ) : null}
 
       <UptimeChartsPanel />
+      <ZoneDayTimelinePanel />
 
       <main className="grid grid-cols-[2fr_1fr] gap-4 max-[980px]:grid-cols-1">
         <ZonesPanel />
