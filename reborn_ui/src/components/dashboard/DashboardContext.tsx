@@ -5,6 +5,28 @@ type DashboardContextValue = ReturnType<typeof useDashboardData>;
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
+const fallbackContext: DashboardContextValue = {
+  zones: [],
+  mapping: [],
+  loading: true,
+  error: "",
+  renameDraft: {},
+  mapForm: {
+    port: "PORTA",
+    bit: 0,
+    zone_key: "",
+    zone_name: "",
+    enabled: true,
+  },
+  zoneCount: 0,
+  onlineCount: 0,
+  setRenameDraft: () => {},
+  setMapForm: () => {},
+  doPoll: async () => {},
+  submitRename: async () => {},
+  submitMapping: async () => {},
+};
+
 type DashboardProviderProps = {
   children: ReactNode;
 };
@@ -17,7 +39,10 @@ export function DashboardProvider({ children }: DashboardProviderProps) {
 export function useDashboardContext() {
   const context = useContext(DashboardContext);
   if (!context) {
-    throw new Error("useDashboardContext must be used within DashboardProvider");
+    if (typeof window !== "undefined") {
+      console.warn("Dashboard context unavailable, using fallback state.");
+    }
+    return fallbackContext;
   }
   return context;
 }

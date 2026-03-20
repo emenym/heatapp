@@ -5,7 +5,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -91,10 +90,11 @@ function ChartPanel({ title, metric }: ChartPanelProps) {
                   borderColor: "rgba(148, 163, 184, 0.35)",
                   borderRadius: "0.75rem",
                   backgroundColor: "rgba(15, 23, 42, 0.96)",
-                  color: "#e2e8f0",
+                  color: "#f8fafc",
                 }}
+                labelStyle={{ color: "#f8fafc", fontWeight: 600 }}
+                itemStyle={{ color: "#f8fafc" }}
               />
-              <Legend wrapperStyle={{ color: "#cbd5e1" }} />
               <Bar dataKey="seconds" name="Uptime" radius={[6, 6, 0, 0]}>
                 {rows.map((entry) => (
                   <Cell key={entry.zone} fill={entry.color} />

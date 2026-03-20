@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { SyntheticEvent } from "react";
 import {
   ApiErrorResponse,
   MappingItem,
@@ -99,7 +100,7 @@ export function useDashboardData() {
     void fetchAll();
   };
 
-  const submitMapping = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+  const submitMapping = async (e: SyntheticEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     setError("");
 

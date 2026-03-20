@@ -14,6 +14,21 @@ import {
 export function ZonesPanel() {
   const { loading, zones, renameDraft, setRenameDraft, submitRename } = useDashboardContext();
 
+  const confirmAndRename = async (zoneKey: string, currentName: string): Promise<void> => {
+    const nextName = (renameDraft[zoneKey] || "").trim();
+    if (!nextName) {
+      await submitRename(zoneKey);
+      return;
+    }
+
+    const confirmed = window.confirm(`Rename zone "${currentName}" to "${nextName}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await submitRename(zoneKey);
+  };
+
   return (
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
@@ -65,7 +80,11 @@ export function ZonesPanel() {
                       placeholder="New name"
                       className="h-8 min-w-28"
                     />
-                    <Button size="sm" variant="outline" onClick={() => void submitRename(zone.zone_key)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void confirmAndRename(zone.zone_key, zone.zone_name)}
+                    >
                       Save
                     </Button>
                   </div>

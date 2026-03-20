@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { SyntheticEvent } from "react";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
 import {
   Select,
@@ -22,13 +23,29 @@ import {
 export function MappingPanel() {
   const { mapping, mapForm, setMapForm, submitMapping } = useDashboardContext();
 
+  const confirmAndSubmit = async (e: SyntheticEvent<HTMLFormElement>): Promise<void> => {
+    const targetZoneKey = mapForm.zone_key?.trim() || `${mapForm.port}:${mapForm.bit}`;
+    const targetZoneName = mapForm.zone_name?.trim() || "(unchanged)";
+    const enabledState = mapForm.enabled ? "enabled" : "disabled";
+
+    const confirmed = window.confirm(
+      `Apply mapping change?\nPort/Bit: ${mapForm.port}:${mapForm.bit}\nZone Key: ${targetZoneKey}\nZone Name: ${targetZoneName}\nState: ${enabledState}`,
+    );
+    if (!confirmed) {
+      e.preventDefault();
+      return;
+    }
+
+    await submitMapping(e);
+  };
+
   return (
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
         <CardTitle>Hardware Map</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <form className="grid gap-3" onSubmit={(e) => void submitMapping(e)}>
+        <form className="grid gap-3" onSubmit={(e) => void confirmAndSubmit(e)}>
           <div className="grid gap-2">
             <Label htmlFor="port">Port</Label>
             <Select
