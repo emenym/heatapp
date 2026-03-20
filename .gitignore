@@ -6,3 +6,5 @@
 
 .venv/
 data/
+reborn_data/
+reborn_ui/node_modules/
