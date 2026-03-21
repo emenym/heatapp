@@ -23,7 +23,6 @@ type DayTimelineSegment = {
 };
 
 type DayTimelineResponse = {
-  day_start?: string;
   selected_date?: string;
   is_today?: boolean;
   now_seconds?: number;
@@ -31,12 +30,16 @@ type DayTimelineResponse = {
 };
 
 type TimelineRow = {
-  id: string;
+  zoneKey: string;
   zone: string;
-  start: number;
-  duration: number;
-  end: number;
-  color: string;
+  laneSpan: number;
+  windows: Array<{
+    id: string;
+    start: number;
+    duration: number;
+    end: number;
+    color: string;
+  }>;
 };
 
 const COLORS = ["#f59e0b", "#22c55e", "#60a5fa", "#f97316", "#14b8a6", "#f43f5e", "#eab308", "#a78bfa"];
@@ -49,11 +52,13 @@ function getTodayLocalDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
-function asLocalTimeLabel(seconds: number, dayStartIso: string): string {
+function asLocalTimeLabel(seconds: number): string {
   const clamped = Math.max(0, Math.min(86399, Math.floor(seconds)));
-  const utcBase = new Date(dayStartIso).getTime();
-  const value = new Date(utcBase + clamped * 1000);
-  return value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const hh = Math.floor(clamped / 3600);
+  const mm = Math.floor((clamped % 3600) / 60);
+  const day = new Date();
+  day.setHours(hh, mm, 0, 0);
+  return day.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function asDuration(seconds: number): string {
@@ -72,16 +77,18 @@ export function ZoneDayTimelinePanel() {
   const [segments, setSegments] = useState<DayTimelineSegment[]>([]);
   const [nowSeconds, setNowSeconds] = useState<number>(0);
   const [selectedDate, setSelectedDate] = useState<string>(getTodayLocalDateString());
-  const [dayStartIso, setDayStartIso] = useState<string>(`${getTodayLocalDateString()}T00:00:00Z`);
 
   useEffect(() => {
     let active = true;
 
     const fetchTimeline = async () => {
-      const res = await fetch(`/api/charts/day-timeline?date=${encodeURIComponent(selectedDate)}`);
+      const tzOffsetMinutes = new Date().getTimezoneOffset();
+      const res = await fetch(
+        `/api/charts/day-timeline?date=${encodeURIComponent(selectedDate)}&tz_offset_minutes=${encodeURIComponent(String(tzOffsetMinutes))}`,
+      );
       if (!res.ok) {
         const now = new Date();
-        setNowSeconds(now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds());
+        setNowSeconds(now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds());
         setSegments([]);
         return;
       }
@@ -91,7 +98,6 @@ export function ZoneDayTimelinePanel() {
       }
       setSegments(body.segments || []);
       setNowSeconds(typeof body.now_seconds === "number" ? body.now_seconds : 0);
-      setDayStartIso(body.day_start || `${selectedDate}T00:00:00Z`);
     };
 
     void fetchTimeline();
@@ -112,24 +118,46 @@ export function ZoneDayTimelinePanel() {
           const end = nowSeconds;
           const start = Math.max(0, end - Math.floor(zone.current_uptime));
           return {
-            id: `${zone.zone_key}-${start}-${end}`,
+            zoneKey: zone.zone_key,
             zone: zone.zone_name || zone.zone_key,
-            start,
-            duration: Math.max(1, end - start),
-            end,
-            color: COLORS[index % COLORS.length],
+            laneSpan: 86400,
+            windows: [
+              {
+                id: `${zone.zone_key}-${start}-${end}`,
+                start,
+                duration: Math.max(1, end - start),
+                end,
+                color: COLORS[index % COLORS.length],
+              },
+            ],
           };
         });
     }
 
-    return segments.map((segment, index) => ({
-      id: `${segment.zone_key}-${segment.start_seconds}-${segment.end_seconds}-${index}`,
-      zone: segment.zone_name || segment.zone_key,
-      start: segment.start_seconds,
-      duration: segment.duration_seconds,
-      end: segment.end_seconds,
-      color: COLORS[index % COLORS.length],
-    }));
+    const grouped = new Map<string, TimelineRow>();
+    segments.forEach((segment, index) => {
+      const zone = segment.zone_name || segment.zone_key;
+      const key = segment.zone_key;
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          zoneKey: key,
+          zone,
+          laneSpan: 86400,
+          windows: [],
+        });
+      }
+
+      grouped.get(key)?.windows.push({
+        id: `${segment.zone_key}-${segment.start_seconds}-${segment.end_seconds}-${index}`,
+        start: segment.start_seconds,
+        duration: segment.duration_seconds,
+        end: segment.end_seconds,
+        color: COLORS[index % COLORS.length],
+      });
+    });
+
+    return Array.from(grouped.values());
   }, [isTodaySelection, nowSeconds, segments, zones]);
 
   return (
@@ -155,13 +183,12 @@ export function ZoneDayTimelinePanel() {
               <XAxis
                 type="number"
                 domain={[0, 86400]}
-                tickFormatter={(value: number) => asLocalTimeLabel(value, dayStartIso)}
+                tickFormatter={(value: number) => asLocalTimeLabel(value)}
                 tick={{ fill: "#cbd5e1", fontSize: 12 }}
               />
               <YAxis
                 type="category"
                 dataKey="zone"
-                allowDuplicatedCategory={false}
                 tick={{ fill: "#cbd5e1", fontSize: 12 }}
                 width={160}
               />
@@ -172,29 +199,57 @@ export function ZoneDayTimelinePanel() {
                 label={{ value: "Now", fill: "#fecaca", position: "insideTopRight" }}
               />
               <Tooltip
-                cursor={{ fill: "rgba(148, 163, 184, 0.08)" }}
-                formatter={(_, __, item) => {
-                  const row = item.payload as TimelineRow;
-                  return [
-                    `${asLocalTimeLabel(row.start, dayStartIso)} - ${asLocalTimeLabel(row.end, dayStartIso)} (${asDuration(row.duration)})`,
-                    row.zone,
-                  ];
-                }}
-                labelFormatter={() => "ON Window"}
-                contentStyle={{
-                  borderColor: "rgba(148, 163, 184, 0.35)",
-                  borderRadius: "0.75rem",
-                  backgroundColor: "rgba(15, 23, 42, 0.96)",
-                  color: "#e2e8f0",
+                cursor={{ fill: "rgba(148, 163, 184, 0.12)" }}
+                content={({ active, payload }) => {
+                  if (!active || !payload || payload.length === 0) {
+                    return null;
+                  }
+
+                  const row = payload[0].payload as TimelineRow;
+
+                  return (
+                    <div
+                      style={{
+                        border: "1px solid rgba(148, 163, 184, 0.35)",
+                        borderRadius: "0.75rem",
+                        backgroundColor: "rgba(15, 23, 42, 0.96)",
+                        color: "#f8fafc",
+                        padding: "0.5rem 0.625rem",
+                      }}
+                    >
+                      <div style={{ color: "#f8fafc", fontWeight: 600, marginBottom: "0.125rem" }}>ON Window</div>
+                      <div style={{ color: "#f8fafc" }}>{row.zone}</div>
+                      {row.windows.slice(0, 4).map((window) => (
+                        <div key={window.id} style={{ color: "#f8fafc" }}>
+                          {asLocalTimeLabel(window.start)} - {asLocalTimeLabel(window.end)} ({asDuration(window.duration)})
+                        </div>
+                      ))}
+                      {row.windows.length > 4 ? <div style={{ color: "#cbd5e1" }}>+{row.windows.length - 4} more...</div> : null}
+                    </div>
+                  );
                 }}
               />
-              <Bar dataKey="start" stackId="timeline" fill="rgba(0,0,0,0)" isAnimationActive={false} />
               <Bar
-                dataKey="duration"
-                stackId="timeline"
+                dataKey="laneSpan"
                 isAnimationActive={false}
                 shape={(props) => (
-                  <Rectangle {...props} fill={props.payload?.color ?? "#f59e0b"} radius={[6, 6, 6, 6]} />
+                  <g>
+                    {(props.payload?.windows || []).map((window: TimelineRow["windows"][number]) => {
+                      const safeWidth = Math.max(1, (window.duration / 86400) * props.width);
+                      const x = props.x + (window.start / 86400) * props.width;
+                      return (
+                        <Rectangle
+                          key={window.id}
+                          x={x}
+                          y={props.y + 2}
+                          width={safeWidth}
+                          height={Math.max(1, props.height - 4)}
+                          fill={window.color}
+                          radius={[6, 6, 6, 6]}
+                        />
+                      );
+                    })}
+                  </g>
                 )}
               />
             </BarChart>
@@ -202,7 +257,7 @@ export function ZoneDayTimelinePanel() {
         </div>
 
         <p className="text-xs text-slate-400">
-          Timeline is displayed in your browser local time for {selectedDate}. Marker: {asLocalTimeLabel(nowSeconds, dayStartIso)}.
+          Timeline is displayed in your browser local time for {selectedDate}. Marker: {asLocalTimeLabel(nowSeconds)}.
         </p>
       </CardContent>
     </Card>

@@ -324,13 +324,20 @@ class RebornRepository:
             out[row["zone_key"]] = out.get(row["zone_key"], 0) + int((seg_stop - seg_start).total_seconds())
         return out
 
-    def day_timeline_segments(self, target_date=None):
-        now = datetime.datetime.utcnow()
-        date_value = target_date or now.date()
-        day_start = datetime.datetime.combine(date_value, datetime.time.min)
-        day_end = day_start + datetime.timedelta(days=1)
-        is_today = date_value == now.date()
-        effective_end = now if is_today else day_end
+    def day_timeline_segments(self, target_date=None, tz_offset_minutes=0):
+        now_utc = datetime.datetime.utcnow()
+        offset = datetime.timedelta(minutes=int(tz_offset_minutes))
+
+        local_now = now_utc - offset
+        date_value = target_date or local_now.date()
+
+        day_start_local = datetime.datetime.combine(date_value, datetime.time.min)
+        day_end_local = day_start_local + datetime.timedelta(days=1)
+        day_start_utc = day_start_local + offset
+        day_end_utc = day_end_local + offset
+
+        is_today = date_value == local_now.date()
+        effective_end_utc = now_utc if is_today else day_end_utc
         out = []
 
         with self.connect() as con:
@@ -356,15 +363,15 @@ class RebornRepository:
         for row in rows:
             start = datetime.datetime.fromisoformat(row["start_ts"].replace("Z", ""))
             stop = row["stop_ts"]
-            stop_dt = datetime.datetime.fromisoformat(stop.replace("Z", "")) if stop else now
+            stop_dt = datetime.datetime.fromisoformat(stop.replace("Z", "")) if stop else now_utc
 
-            seg_start = max(start, day_start)
-            seg_stop = min(stop_dt, effective_end)
+            seg_start = max(start, day_start_utc)
+            seg_stop = min(stop_dt, effective_end_utc)
             if seg_stop <= seg_start:
                 continue
 
-            start_seconds = int((seg_start - day_start).total_seconds())
-            end_seconds = int((seg_stop - day_start).total_seconds())
+            start_seconds = int((seg_start - day_start_utc).total_seconds())
+            end_seconds = int((seg_stop - day_start_utc).total_seconds())
 
             out.append(
                 {
@@ -382,13 +389,13 @@ class RebornRepository:
                 continue
 
             updated_at = datetime.datetime.fromisoformat(row["updated_at"].replace("Z", ""))
-            seg_start = max(updated_at, day_start)
-            seg_stop = effective_end
+            seg_start = max(updated_at, day_start_utc)
+            seg_stop = effective_end_utc
             if seg_stop <= seg_start:
                 continue
 
-            start_seconds = int((seg_start - day_start).total_seconds())
-            end_seconds = int((seg_stop - day_start).total_seconds())
+            start_seconds = int((seg_start - day_start_utc).total_seconds())
+            end_seconds = int((seg_stop - day_start_utc).total_seconds())
             out.append(
                 {
                     "zone_key": row["zone_key"],
@@ -402,12 +409,12 @@ class RebornRepository:
         out.sort(key=lambda item: (item["zone_name"], item["start_seconds"]))
 
         if is_today:
-            now_seconds = int((effective_end - day_start).total_seconds())
+            now_seconds = int((local_now - day_start_local).total_seconds())
         else:
             now_seconds = 86399
 
         return {
-            "day_start": day_start.replace(microsecond=0).isoformat() + "Z",
+            "day_start": day_start_local.replace(microsecond=0).isoformat(),
             "selected_date": date_value.isoformat(),
             "is_today": is_today,
             "now_seconds": max(0, min(86399, now_seconds)),

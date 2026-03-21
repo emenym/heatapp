@@ -135,16 +135,22 @@ def set_mapping():
 
 @app.route("/api/charts/day-timeline", methods=["GET"])
 def day_timeline_chart_data():
+    tz_offset_minutes = request.args.get("tz_offset_minutes", default="0")
+    try:
+        tz_offset_minutes = int(tz_offset_minutes)
+    except ValueError:
+        return jsonify({"error": "tz_offset_minutes must be an integer"}), 400
+
     date_str = request.args.get("date")
     if not date_str:
-        return jsonify(repo.day_timeline_segments())
+        return jsonify(repo.day_timeline_segments(tz_offset_minutes=tz_offset_minutes))
 
     try:
         selected_date = datetime.date.fromisoformat(date_str)
     except ValueError:
         return jsonify({"error": "date must be YYYY-MM-DD"}), 400
 
-    return jsonify(repo.day_timeline_segments(selected_date))
+    return jsonify(repo.day_timeline_segments(selected_date, tz_offset_minutes=tz_offset_minutes))
 
 
 if __name__ == "__main__":
