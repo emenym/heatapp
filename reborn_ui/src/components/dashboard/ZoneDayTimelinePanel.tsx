@@ -44,6 +44,7 @@ type TimelineRow = {
 };
 
 const COLORS = ["#f59e0b", "#22c55e", "#60a5fa", "#f97316", "#14b8a6", "#f43f5e", "#eab308", "#a78bfa"];
+const DEFAULT_MIN_TRANSITION_SECONDS = 2;
 
 function getTodayLocalDateString(): string {
   const now = new Date();
@@ -76,6 +77,7 @@ function asDuration(seconds: number): string {
 export function ZoneDayTimelinePanel() {
   const { zones } = useDashboardContext();
   const [selectedDate, setSelectedDate] = useState<string>(getTodayLocalDateString());
+  const [minTransitionSeconds, setMinTransitionSeconds] = useState<number>(DEFAULT_MIN_TRANSITION_SECONDS);
   const tzOffsetMinutes = new Date().getTimezoneOffset();
   const timelineQuery = useQuery<DayTimelineResponse>({
     queryKey: ["day-timeline", selectedDate, tzOffsetMinutes, 2000],
@@ -108,6 +110,10 @@ export function ZoneDayTimelinePanel() {
         .map((zone, index) => {
           const end = nowSeconds;
           const start = Math.max(0, end - Math.floor(zone.current_uptime));
+          const duration = Math.max(1, end - start);
+          if (duration <= minTransitionSeconds) {
+            return null;
+          }
           return {
             zoneKey: zone.zone_key,
             zone: zone.zone_name || zone.zone_key,
@@ -116,13 +122,14 @@ export function ZoneDayTimelinePanel() {
               {
                 id: `${zone.zone_key}-${start}-${end}`,
                 start,
-                duration: Math.max(1, end - start),
+                duration,
                 end,
                 color: COLORS[index % COLORS.length],
               },
             ],
           };
-        });
+        })
+        .filter((row): row is TimelineRow => row !== null);
     }
 
     const grouped = new Map<string, TimelineRow>();
@@ -148,17 +155,37 @@ export function ZoneDayTimelinePanel() {
       });
     });
 
-    return Array.from(grouped.values());
-  }, [isTodaySelection, nowSeconds, segments, zones]);
+    return Array.from(grouped.values())
+      .map((row) => ({
+        ...row,
+        windows: row.windows.filter((window) => window.duration > minTransitionSeconds),
+      }))
+      .filter((row) => row.windows.length > 0);
+  }, [isTodaySelection, minTransitionSeconds, nowSeconds, segments, zones]);
 
   return (
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
         <div className="flex items-end justify-between gap-3 max-[640px]:flex-col max-[640px]:items-start">
-          <CardTitle>Zone On-Times (Today)</CardTitle>
-          <div className="w-full max-w-56">
-            <p className="mb-1 text-xs text-slate-300">Date (Local)</p>
-            <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+          <CardTitle>Zone On-Times {!isTodaySelection && `(${selectedDate})`}{isTodaySelection && "(Today)"}</CardTitle>
+          <div className="flex w-full max-w-[31rem] gap-3 max-[640px]:max-w-full max-[480px]:flex-col">
+            <div className="w-full max-w-56">
+              <p className="mb-1 text-xs text-slate-300">Date (Local)</p>
+              <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+            </div>
+            <div className="w-full max-w-44">
+              <p className="mb-1 text-xs text-slate-300">Min Transition (sec)</p>
+              <Input
+                type="number"
+                min={0}
+                step={1}
+                value={String(minTransitionSeconds)}
+                onChange={(e) => {
+                  const parsed = Number.parseInt(e.target.value, 10);
+                  setMinTransitionSeconds(Number.isFinite(parsed) ? Math.max(0, parsed) : 0);
+                }}
+              />
+            </div>
           </div>
         </div>
       </CardHeader>
