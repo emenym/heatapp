@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
@@ -35,6 +36,17 @@ export function HeroHeader() {
     streamState,
     lastStreamMessageAt,
   } = useDashboardContext();
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const handlePollIntervalChange = (value: string) => {
     const seconds = Number(value);
@@ -49,7 +61,7 @@ export function HeroHeader() {
 
   const lastUpdateSeconds =
     typeof lastStreamMessageAt === "number"
-      ? Math.max(0, Math.floor((Date.now() - lastStreamMessageAt) / 1000))
+      ? Math.max(0, Math.floor((nowMs - lastStreamMessageAt) / 1000))
       : null;
 
   return (
