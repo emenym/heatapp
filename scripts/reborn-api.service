@@ -1,0 +1,21 @@
+[Unit]
+Description=Heatapp Reborn API (native)
+After=network-online.target
+Wants=network-online.target
+PartOf=reborn-native.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/mike/heatapp
+EnvironmentFile=-/home/mike/heatapp/scripts/reborn-native.env
+Environment=PYTHONUNBUFFERED=1
+Environment=REBORN_PORT=8081
+ExecStart=/home/mike/heatapp/.venv/bin/python3 -m reborn.app
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=reborn-native.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=Heatapp Reborn UI (native Vite dev server)
+After=network-online.target reborn-api.service
+Wants=network-online.target reborn-api.service
+PartOf=reborn-native.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/mike/heatapp/reborn_ui
+EnvironmentFile=-/home/mike/heatapp/scripts/reborn-native.env
+Environment=NODE_ENV=development
+Environment=VITE_PROXY_TARGET=http://localhost:8081
+ExecStart=/usr/bin/npm run dev -- --host 0.0.0.0 --port 5173
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=reborn-native.target

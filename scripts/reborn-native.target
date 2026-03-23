@@ -1,0 +1,4 @@
+[Unit]
+Description=Heatapp Reborn native service stack
+Wants=reborn-api.service reborn-poller.service reborn-ui.service
+After=network-online.target

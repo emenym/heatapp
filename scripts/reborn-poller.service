@@ -1,0 +1,20 @@
+[Unit]
+Description=Heatapp Reborn poller (native)
+After=network-online.target reborn-api.service
+Wants=network-online.target reborn-api.service
+PartOf=reborn-native.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/mike/heatapp
+EnvironmentFile=-/home/mike/heatapp/scripts/reborn-native.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/mike/heatapp/.venv/bin/python3 -m reborn.run_poller
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=reborn-native.target
