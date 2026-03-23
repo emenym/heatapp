@@ -22,6 +22,8 @@ const fallbackContext: DashboardContextValue = {
   onlineCount: 0,
   setRenameDraft: () => {},
   setMapForm: () => {},
+  pollIntervalMs: 10000,
+  setPollIntervalMs: () => {},
   doPoll: async () => {},
   submitRename: async () => {},
   submitMapping: async () => {},

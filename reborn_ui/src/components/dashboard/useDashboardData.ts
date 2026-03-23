@@ -21,6 +21,7 @@ const sortByPortBit = <T extends { port: Port; bit: number }>(a: T, b: T): numbe
 export function useDashboardData() {
   const [actionError, setActionError] = useState<string>("");
   const [renameDraft, setRenameDraft] = useState<Record<string, string>>({});
+  const [pollIntervalMs, setPollIntervalMs] = useState<number>(10000);
   const queryClient = useQueryClient();
 
   const invalidateDashboardQueries = async (): Promise<void> => {
@@ -45,8 +46,11 @@ export function useDashboardData() {
       const zonesData: ZonesResponse = await zonesRes.json();
       return (zonesData.zones || []).slice().sort(sortByPortBit);
     },
-    refetchInterval: 10000,
+    staleTime: pollIntervalMs,
+    refetchInterval: pollIntervalMs,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const {
@@ -64,8 +68,11 @@ export function useDashboardData() {
       const mapData: MappingResponse = await mapRes.json();
       return (mapData.mapping || []).slice().sort(sortByPortBit);
     },
-    refetchInterval: 10000,
+    staleTime: pollIntervalMs,
+    refetchInterval: pollIntervalMs,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const loading = zonesLoading || mappingLoading;
@@ -188,6 +195,8 @@ export function useDashboardData() {
     onlineCount,
     setRenameDraft,
     setMapForm,
+    pollIntervalMs,
+    setPollIntervalMs,
     doPoll,
     submitRename,
     submitMapping,

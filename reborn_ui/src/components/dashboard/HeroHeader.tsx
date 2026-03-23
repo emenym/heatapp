@@ -1,8 +1,20 @@
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
 
 export function HeroHeader() {
-  const { zoneCount, onlineCount, doPoll } = useDashboardContext();
+  const { zoneCount, onlineCount, doPoll, pollIntervalMs, setPollIntervalMs } = useDashboardContext();
+
+  const handlePollIntervalChange = (value: string) => {
+    const seconds = Number(value);
+
+    if (!Number.isFinite(seconds)) {
+      return;
+    }
+
+    const boundedSeconds = Math.min(300, Math.max(1, Math.round(seconds)));
+    setPollIntervalMs(boundedSeconds * 1000);
+  };
 
   return (
     <header className="panel-glass flex items-end justify-between gap-4 p-4 max-[980px]:flex-col max-[980px]:items-start">
@@ -13,6 +25,19 @@ export function HeroHeader() {
       </div>
 
       <div className="flex w-full items-center justify-end gap-4 max-[980px]:justify-between">
+        <label className="grid gap-1 text-right text-xs text-slate-300 max-[980px]:text-left">
+          Poll (s)
+          <Input
+            type="number"
+            min={1}
+            max={300}
+            step={1}
+            value={Math.round(pollIntervalMs / 1000)}
+            onChange={(e) => handlePollIntervalChange(e.target.value)}
+            className="h-8 w-24"
+            aria-label="API poll interval in seconds"
+          />
+        </label>
         <div className="grid text-right max-[980px]:text-left">
           <span className="text-xs text-slate-300">Zones</span>
           <strong className="text-2xl">{zoneCount}</strong>
