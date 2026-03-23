@@ -70,7 +70,9 @@ export function ZoneCalendarHeatmapPanel() {
               onValueChange={(value) => setSelectedZone(value || "")}
             >
               <SelectTrigger className="bg-[rgba(15,23,42,0.65)]">
-                <SelectValue placeholder="Select zone" />
+                <SelectValue placeholder="Select zone">
+                  {selected ? selected.zone_name || selected.zone_key : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {zones.map((zone) => (
