@@ -24,6 +24,11 @@ function DashboardView() {
         <div className="rounded-xl border border-red-500/80 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>
       ) : null}
 
+      <section className="grid grid-cols-[2fr_1fr] gap-4 max-[980px]:grid-cols-1">
+        <ZonesPanel />
+        <MappingPanel />
+      </section>
+
       <UptimeChartsPanel />
       <ZoneDayTimelinePanel />
       <RuntimeCompositionPanel />
@@ -38,10 +43,7 @@ function DashboardView() {
         <ZoneAnomalyPanel />
       </section>
 
-      <section className="grid grid-cols-[2fr_1fr] gap-4 max-[980px]:grid-cols-1">
-        <ZonesPanel />
-        <MappingPanel />
-      </section>
+
     </div>
   );
 }
