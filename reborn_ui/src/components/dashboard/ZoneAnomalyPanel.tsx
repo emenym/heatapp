@@ -58,10 +58,10 @@ export function ZoneAnomalyPanel() {
         });
       }
 
-      if (segmentCount >= 14) {
+      if (segmentCount >= 25) {
         out.push({
           zone: name,
-          severity: "high",
+          severity: "medium",
           reason: `${segmentCount} ON windows today, indicating possible short cycling.`,
         });
       }
@@ -89,7 +89,30 @@ export function ZoneAnomalyPanel() {
   return (
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
-        <CardTitle>Anomaly Watch</CardTitle>
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle>Anomaly Watch</CardTitle>
+          <div className="group relative">
+            <button
+              type="button"
+              aria-label="Show anomaly rules"
+              className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-400/50 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70"
+            >
+              i
+            </button>
+            <div
+              role="tooltip"
+              className="pointer-events-none invisible absolute right-0 top-7 z-20 w-80 rounded-md border border-slate-400/30 bg-slate-950/95 p-3 text-xs text-slate-200 opacity-0 shadow-lg transition-all group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+            >
+              <p className="mb-1 font-semibold text-slate-100">Current anomaly rules</p>
+              <ul className="list-disc space-y-1 pl-4">
+                <li>High: zone is ON continuously for 4+ hours.</li>
+                <li>Medium: 25+ ON windows in a single day (possible short cycling).</li>
+                <li>Medium: total runtime exceeds 24 hours while last 24h runtime is 3 minutes or less.</li>
+                <li>High: daily runtime exceeds 20 hours (very high utilization).</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {anomalies.length === 0 ? (
