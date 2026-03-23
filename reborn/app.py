@@ -1,12 +1,17 @@
 import datetime
+import json
+import time
 
 from flask import Flask, jsonify, request
+from flask_sock import Sock
+from simple_websocket import ConnectionClosed
 
 from reborn.config import DB_PATH, PORT, ZONE_SEED_PATH
 from reborn.db import RebornRepository
 from reborn.poller import sample_zone_states
 
 app = Flask(__name__)
+sock = Sock(app)
 repo = RebornRepository(DB_PATH)
 
 
@@ -40,6 +45,21 @@ def _zone_payload():
             }
         )
     return items
+
+
+def _dashboard_snapshot():
+    return {
+        "zones": _zone_payload(),
+        "mapping": repo.list_mapping(),
+    }
+
+
+def _bounded_int(raw_value, fallback, minimum, maximum):
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(minimum, min(maximum, value))
 
 
 def init_reborn():
@@ -99,6 +119,67 @@ def options_rename(zone_key):
 @app.route("/api/mapping", methods=["GET"])
 def get_mapping():
     return jsonify({"mapping": repo.list_mapping()})
+
+
+@sock.route("/ws/dashboard")
+def dashboard_stream(ws):
+    interval_ms = request.args.get("interval_ms", default="10000")
+    interval_ms = _bounded_int(interval_ms, 10000, 1000, 300000)
+
+    while True:
+        try:
+            ws.send(json.dumps(_dashboard_snapshot()))
+            time.sleep(interval_ms / 1000.0)
+        except ConnectionClosed:
+            break
+
+
+@sock.route("/ws/charts/day-timeline")
+def day_timeline_stream(ws):
+    interval_ms = _bounded_int(request.args.get("interval_ms", default="10000"), 10000, 1000, 300000)
+    tz_offset_minutes = _bounded_int(request.args.get("tz_offset_minutes", default="0"), 0, -1440, 1440)
+    max_segments = _bounded_int(request.args.get("max_segments", default="2000"), 2000, 10, 10000)
+    date_str = request.args.get("date")
+
+    selected_date = None
+    if date_str:
+        try:
+            selected_date = datetime.date.fromisoformat(date_str)
+        except ValueError:
+            ws.send(json.dumps({"error": "date must be YYYY-MM-DD"}))
+            return
+
+    while True:
+        try:
+            payload = repo.day_timeline_segments(
+                selected_date,
+                tz_offset_minutes=tz_offset_minutes,
+                max_segments=max_segments,
+            )
+            ws.send(json.dumps(payload))
+            time.sleep(interval_ms / 1000.0)
+        except ConnectionClosed:
+            break
+
+
+@sock.route("/ws/charts/recent-events")
+def recent_events_stream(ws):
+    interval_ms = _bounded_int(request.args.get("interval_ms", default="15000"), 15000, 1000, 300000)
+    tz_offset_minutes = _bounded_int(request.args.get("tz_offset_minutes", default="0"), 0, -1440, 1440)
+    minutes = _bounded_int(request.args.get("minutes", default="180"), 180, 1, 1440)
+    max_events = _bounded_int(request.args.get("max_events", default="2000"), 2000, 10, 10000)
+
+    while True:
+        try:
+            payload = repo.recent_transition_events(
+                minutes=minutes,
+                tz_offset_minutes=tz_offset_minutes,
+                max_events=max_events,
+            )
+            ws.send(json.dumps(payload))
+            time.sleep(interval_ms / 1000.0)
+        except ConnectionClosed:
+            break
 
 
 @app.route("/api/mapping", methods=["OPTIONS"])

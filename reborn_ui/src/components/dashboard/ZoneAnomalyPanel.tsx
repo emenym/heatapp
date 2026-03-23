@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
 import { formatSeconds } from "@/components/dashboard/chartUtils";
@@ -19,24 +18,70 @@ type Anomaly = {
 };
 
 export function ZoneAnomalyPanel() {
-  const { zones } = useDashboardContext();
+  const { zones, pollIntervalMs } = useDashboardContext();
   const tzOffsetMinutes = new Date().getTimezoneOffset();
-  const dayTimelineQuery = useQuery<DayTimelineResponse>({
-    queryKey: ["day-timeline", "today", tzOffsetMinutes, 2000],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/charts/day-timeline?tz_offset_minutes=${encodeURIComponent(String(tzOffsetMinutes))}&max_segments=2000`,
-      );
-      if (!res.ok) {
-        throw new Error("Unable to load day timeline");
-      }
-      return res.json();
-    },
-    refetchInterval: 15000,
-    refetchIntervalInBackground: false,
-  });
+  const [todayTimelineData, setTodayTimelineData] = useState<DayTimelineResponse | null>(null);
 
-  const todaySegments = dayTimelineQuery.data?.segments || [];
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let cancelled = false;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+
+    const connect = () => {
+      clearReconnectTimer();
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const params = new URLSearchParams({
+        tz_offset_minutes: String(tzOffsetMinutes),
+        max_segments: "2000",
+        interval_ms: String(pollIntervalMs),
+      });
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws/charts/day-timeline?${params.toString()}`);
+
+      socket.onopen = () => {
+        if (cancelled) {
+          socket?.close();
+        }
+      };
+
+      socket.onmessage = (event) => {
+        if (cancelled) {
+          return;
+        }
+        try {
+          const payload = JSON.parse(event.data) as DayTimelineResponse;
+          setTodayTimelineData(payload);
+        } catch {
+          // Keep last good payload on malformed updates.
+        }
+      };
+
+      socket.onclose = () => {
+        if (cancelled) {
+          return;
+        }
+        reconnectTimer = window.setTimeout(connect, 2000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      clearReconnectTimer();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    };
+  }, [pollIntervalMs, tzOffsetMinutes]);
+
+  const todaySegments = todayTimelineData?.segments || [];
 
   const anomalies = useMemo<Anomaly[]>(() => {
     const segmentsByZone = todaySegments.reduce<Record<string, number>>((acc, segment) => {

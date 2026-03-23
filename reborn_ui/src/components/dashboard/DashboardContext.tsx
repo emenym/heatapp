@@ -24,6 +24,8 @@ const fallbackContext: DashboardContextValue = {
   setMapForm: () => {},
   pollIntervalMs: 10000,
   setPollIntervalMs: () => {},
+  streamState: "connecting",
+  lastStreamMessageAt: null,
   doPoll: async () => {},
   submitRename: async () => {},
   submitMapping: async () => {},

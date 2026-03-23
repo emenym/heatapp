@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
 import { Input } from "@/components/ui/input";
@@ -75,31 +74,95 @@ function asDuration(seconds: number): string {
 }
 
 export function ZoneDayTimelinePanel() {
-  const { zones } = useDashboardContext();
+  const { zones, pollIntervalMs } = useDashboardContext();
   const [selectedDate, setSelectedDate] = useState<string>(getTodayLocalDateString());
   const [minTransitionSeconds, setMinTransitionSeconds] = useState<number>(DEFAULT_MIN_TRANSITION_SECONDS);
+  const [timelineData, setTimelineData] = useState<DayTimelineResponse | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState<boolean>(true);
+  const [timelineError, setTimelineError] = useState<string>("");
   const tzOffsetMinutes = new Date().getTimezoneOffset();
-  const timelineQuery = useQuery<DayTimelineResponse>({
-    queryKey: ["day-timeline", selectedDate, tzOffsetMinutes, 2000],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/charts/day-timeline?date=${encodeURIComponent(selectedDate)}&tz_offset_minutes=${encodeURIComponent(String(tzOffsetMinutes))}&max_segments=2000`,
-      );
-      if (!res.ok) {
-        throw new Error("Unable to load day timeline");
-      }
-      return res.json();
-    },
-    refetchInterval: 10000,
-    refetchIntervalInBackground: false,
-  });
 
-  const segments = timelineQuery.data?.segments || [];
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let cancelled = false;
+
+    setTimelineLoading(true);
+    setTimelineError("");
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+
+    const connect = () => {
+      clearReconnectTimer();
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const params = new URLSearchParams({
+        date: selectedDate,
+        tz_offset_minutes: String(tzOffsetMinutes),
+        max_segments: "2000",
+        interval_ms: String(pollIntervalMs),
+      });
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws/charts/day-timeline?${params.toString()}`);
+
+      socket.onopen = () => {
+        if (cancelled) {
+          socket?.close();
+        }
+      };
+
+      socket.onmessage = (event) => {
+        if (cancelled) {
+          return;
+        }
+        try {
+          const payload = JSON.parse(event.data) as DayTimelineResponse & { error?: string };
+          if (payload.error) {
+            setTimelineError(payload.error);
+            return;
+          }
+          setTimelineData(payload);
+          setTimelineLoading(false);
+          setTimelineError("");
+        } catch {
+          setTimelineError("Received invalid day timeline payload");
+        }
+      };
+
+      socket.onerror = () => {
+        if (!cancelled) {
+          setTimelineError("Day timeline stream connection failed");
+        }
+      };
+
+      socket.onclose = () => {
+        if (cancelled) {
+          return;
+        }
+        reconnectTimer = window.setTimeout(connect, 2000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      clearReconnectTimer();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    };
+  }, [pollIntervalMs, selectedDate, tzOffsetMinutes]);
+
+  const segments = timelineData?.segments || [];
 
   const now = new Date();
   const fallbackNowSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
   const nowSeconds =
-    typeof timelineQuery.data?.now_seconds === "number" ? timelineQuery.data.now_seconds : fallbackNowSeconds;
+    typeof timelineData?.now_seconds === "number" ? timelineData.now_seconds : fallbackNowSeconds;
 
   const isTodaySelection = selectedDate === getTodayLocalDateString();
 
@@ -190,6 +253,8 @@ export function ZoneDayTimelinePanel() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {timelineLoading ? <p className="text-sm text-slate-300">Loading day timeline...</p> : null}
+        {timelineError ? <p className="text-sm text-amber-200">{timelineError}</p> : null}
         {rows.length === 0 ? (
           <p className="text-sm text-slate-300">No ON periods recorded for {selectedDate}.</p>
         ) : null}

@@ -1,6 +1,6 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useDashboardContext } from "@/components/dashboard/DashboardContext";
 import {
   CartesianGrid,
   Dot,
@@ -34,27 +34,89 @@ type EventPoint = {
 };
 
 export function RecentEventsTimelinePanel() {
+  const { pollIntervalMs } = useDashboardContext();
   const tzOffsetMinutes = new Date().getTimezoneOffset();
-  const recentEventsQuery = useQuery<RecentEventsResponse>({
-    queryKey: ["recent-events", 180, tzOffsetMinutes, 2000],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/charts/recent-events?minutes=180&tz_offset_minutes=${encodeURIComponent(String(tzOffsetMinutes))}&max_events=2000`,
-      );
-      if (!res.ok) {
-        throw new Error("Unable to load transition events");
-      }
-      return res.json();
-    },
-    refetchInterval: 15000,
-    refetchIntervalInBackground: false,
-  });
+  const [recentEventsData, setRecentEventsData] = useState<RecentEventsResponse | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>("");
 
-  const loading = recentEventsQuery.isLoading;
-  const error = recentEventsQuery.error instanceof Error ? recentEventsQuery.error.message : "";
-  const windowMinutes =
-    typeof recentEventsQuery.data?.window_minutes === "number" ? recentEventsQuery.data.window_minutes : 180;
-  const events = recentEventsQuery.data?.events || [];
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let cancelled = false;
+
+    setLoading(true);
+    setError("");
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+
+    const connect = () => {
+      clearReconnectTimer();
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const params = new URLSearchParams({
+        minutes: "180",
+        tz_offset_minutes: String(tzOffsetMinutes),
+        max_events: "2000",
+        interval_ms: String(pollIntervalMs),
+      });
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws/charts/recent-events?${params.toString()}`);
+
+      socket.onopen = () => {
+        if (cancelled) {
+          socket?.close();
+        }
+      };
+
+      socket.onmessage = (event) => {
+        if (cancelled) {
+          return;
+        }
+        try {
+          const payload = JSON.parse(event.data) as RecentEventsResponse & { error?: string };
+          if (payload.error) {
+            setError(payload.error);
+            return;
+          }
+          setRecentEventsData(payload);
+          setLoading(false);
+          setError("");
+        } catch {
+          setError("Received invalid recent events payload");
+        }
+      };
+
+      socket.onerror = () => {
+        if (!cancelled) {
+          setError("Recent events stream connection failed");
+        }
+      };
+
+      socket.onclose = () => {
+        if (cancelled) {
+          return;
+        }
+        reconnectTimer = window.setTimeout(connect, 2000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      clearReconnectTimer();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    };
+  }, [pollIntervalMs, tzOffsetMinutes]);
+
+  const windowMinutes = typeof recentEventsData?.window_minutes === "number" ? recentEventsData.window_minutes : 180;
+  const events = recentEventsData?.events || [];
 
   const points = useMemo<EventPoint[]>(() => {
     const nowMs = Date.now();

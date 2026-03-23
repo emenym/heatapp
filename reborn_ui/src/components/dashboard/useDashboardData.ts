@@ -1,14 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SyntheticEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   ApiErrorResponse,
   MappingItem,
-  MappingResponse,
   MapFormState,
   Port,
   Zone,
-  ZonesResponse,
 } from "@/components/dashboard/types";
 
 const sortByPortBit = <T extends { port: Port; bit: number }>(a: T, b: T): number => {
@@ -22,64 +20,107 @@ export function useDashboardData() {
   const [actionError, setActionError] = useState<string>("");
   const [renameDraft, setRenameDraft] = useState<Record<string, string>>({});
   const [pollIntervalMs, setPollIntervalMs] = useState<number>(10000);
-  const queryClient = useQueryClient();
+  const [streamState, setStreamState] = useState<"connecting" | "open" | "reconnecting" | "error">("connecting");
+  const [lastStreamMessageAt, setLastStreamMessageAt] = useState<number | null>(null);
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [mapping, setMapping] = useState<MappingItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [streamError, setStreamError] = useState<string>("");
 
-  const invalidateDashboardQueries = async (): Promise<void> => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["zones"] }),
-      queryClient.invalidateQueries({ queryKey: ["mapping"] }),
-    ]);
+  const refreshSnapshot = async (): Promise<void> => {
+    const [zonesRes, mapRes] = await Promise.all([fetch("/api/zones"), fetch("/api/mapping")]);
+    if (!zonesRes.ok) {
+      throw new Error("Failed to load zones");
+    }
+    if (!mapRes.ok) {
+      throw new Error("Failed to load mapping");
+    }
+
+    const zonesData = (await zonesRes.json()) as { zones?: Zone[] };
+    const mapData = (await mapRes.json()) as { mapping?: MappingItem[] };
+
+    setZones((zonesData.zones || []).slice().sort(sortByPortBit));
+    setMapping((mapData.mapping || []).slice().sort(sortByPortBit));
   };
 
-  const {
-    data: zones = [],
-    isLoading: zonesLoading,
-    error: zonesError,
-  } = useQuery<Zone[]>({
-    queryKey: ["zones"],
-    queryFn: async () => {
-      const zonesRes = await fetch("/api/zones");
-      if (!zonesRes.ok) {
-        throw new Error("Failed to load zones");
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let cancelled = false;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
       }
+    };
 
-      const zonesData: ZonesResponse = await zonesRes.json();
-      return (zonesData.zones || []).slice().sort(sortByPortBit);
-    },
-    staleTime: pollIntervalMs,
-    refetchInterval: pollIntervalMs,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
+    const connect = () => {
+      clearReconnectTimer();
+      setStreamState((prev) => (prev === "open" ? "reconnecting" : "connecting"));
 
-  const {
-    data: mapping = [],
-    isLoading: mappingLoading,
-    error: mappingError,
-  } = useQuery<MappingItem[]>({
-    queryKey: ["mapping"],
-    queryFn: async () => {
-      const mapRes = await fetch("/api/mapping");
-      if (!mapRes.ok) {
-        throw new Error("Failed to load mapping");
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${window.location.host}/ws/dashboard?interval_ms=${encodeURIComponent(String(pollIntervalMs))}`;
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        if (cancelled) {
+          socket?.close();
+          return;
+        }
+        setStreamState("open");
+        setStreamError("");
+      };
+
+      socket.onmessage = (event) => {
+        if (cancelled) {
+          return;
+        }
+
+        try {
+          const payload = JSON.parse(event.data) as {
+            zones?: Zone[];
+            mapping?: MappingItem[];
+          };
+          setZones((payload.zones || []).slice().sort(sortByPortBit));
+          setMapping((payload.mapping || []).slice().sort(sortByPortBit));
+          setLastStreamMessageAt(Date.now());
+          setLoading(false);
+          setStreamError("");
+        } catch {
+          setStreamError("Received invalid stream payload");
+          setStreamState("error");
+        }
+      };
+
+      socket.onerror = () => {
+        if (!cancelled) {
+          setStreamState("error");
+          setStreamError("Dashboard stream connection failed");
+        }
+      };
+
+      socket.onclose = () => {
+        if (cancelled) {
+          return;
+        }
+        setStreamState("reconnecting");
+        reconnectTimer = window.setTimeout(connect, 2000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      clearReconnectTimer();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
       }
+    };
+  }, [pollIntervalMs]);
 
-      const mapData: MappingResponse = await mapRes.json();
-      return (mapData.mapping || []).slice().sort(sortByPortBit);
-    },
-    staleTime: pollIntervalMs,
-    refetchInterval: pollIntervalMs,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
-
-  const loading = zonesLoading || mappingLoading;
-  const error =
-    actionError ||
-    (zonesError instanceof Error ? zonesError.message : "") ||
-    (mappingError instanceof Error ? mappingError.message : "");
+  const error = actionError || streamError;
 
   const [mapForm, setMapForm] = useState<MapFormState>({
     port: "PORTA",
@@ -99,7 +140,7 @@ export function useDashboardData() {
         throw new Error("Poll request failed");
       }
     },
-    onSuccess: invalidateDashboardQueries,
+    onSuccess: refreshSnapshot,
   });
 
   const renameMutation = useMutation({
@@ -115,7 +156,7 @@ export function useDashboardData() {
         throw new Error(body.error || "Rename failed");
       }
     },
-    onSuccess: invalidateDashboardQueries,
+    onSuccess: refreshSnapshot,
   });
 
   const mappingMutation = useMutation({
@@ -137,7 +178,7 @@ export function useDashboardData() {
         throw new Error(data.error || "Mapping update failed");
       }
     },
-    onSuccess: invalidateDashboardQueries,
+    onSuccess: refreshSnapshot,
   });
 
   const doPoll = async (): Promise<void> => {
@@ -197,6 +238,8 @@ export function useDashboardData() {
     setMapForm,
     pollIntervalMs,
     setPollIntervalMs,
+    streamState,
+    lastStreamMessageAt,
     doPoll,
     submitRename,
     submitMapping,
