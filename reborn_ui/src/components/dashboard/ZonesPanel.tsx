@@ -11,6 +11,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+function formatDurationHms(totalSeconds: number): string {
+  const safeSeconds = Number.isFinite(totalSeconds) && totalSeconds > 0 ? Math.floor(totalSeconds) : 0;
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
 export function ZonesPanel() {
   const { loading, zones, renameDraft, setRenameDraft, submitRename } = useDashboardContext();
 
@@ -69,9 +79,9 @@ export function ZonesPanel() {
                     {zone.state === "1" ? "ON" : "OFF"}
                   </Badge>
                 </TableCell>
-                <TableCell>{zone.current_uptime}s</TableCell>
-                <TableCell>{zone.day_uptime}s</TableCell>
-                <TableCell>{zone.total_uptime}s</TableCell>
+                <TableCell>{formatDurationHms(zone.current_uptime)}</TableCell>
+                <TableCell>{formatDurationHms(zone.day_uptime)}</TableCell>
+                <TableCell>{formatDurationHms(zone.total_uptime)}</TableCell>
                 <TableCell>
                   <div className="flex gap-2">
                     <Input
