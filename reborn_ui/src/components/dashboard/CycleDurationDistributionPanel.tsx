@@ -16,7 +16,7 @@ type DayTimelineResponse = {
   segments?: DayTimelineSegment[];
 };
 
-const BUCKETS = [1, 3, 5, 10, 20, 30, 60, 120, 240];
+const BUCKETS = [0, 3, 5, 10, 20, 30, 60, 120, 240];
 
 function bucketLabel(min: number, next?: number): string {
   if (!next) {
@@ -56,11 +56,15 @@ export function CycleDurationDistributionPanel() {
     const counts = BUCKETS.map(() => 0);
     filtered.forEach((segment) => {
       const mins = Math.max(0, segment.duration_seconds / 60);
-      let idx = BUCKETS.length - 1;
-      for (let i = 0; i < BUCKETS.length - 1; i += 1) {
-        if (mins >= BUCKETS[i] && mins < BUCKETS[i + 1]) {
-          idx = i;
-          break;
+      let idx = 0;
+      if (mins >= BUCKETS[BUCKETS.length - 1]) {
+        idx = BUCKETS.length - 1;
+      } else {
+        for (let i = 0; i < BUCKETS.length - 1; i += 1) {
+          if (mins >= BUCKETS[i] && mins < BUCKETS[i + 1]) {
+            idx = i;
+            break;
+          }
         }
       }
       counts[idx] += 1;
