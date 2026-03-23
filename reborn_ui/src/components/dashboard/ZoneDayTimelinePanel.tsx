@@ -167,10 +167,23 @@ export function ZoneDayTimelinePanel() {
   const isTodaySelection = selectedDate === getTodayLocalDateString();
 
   const rows = useMemo<TimelineRow[]>(() => {
+    const zoneColorByKey = new Map<string, string>();
+    const getZoneColor = (zoneKey: string): string => {
+      const existing = zoneColorByKey.get(zoneKey);
+      if (existing) {
+        return existing;
+      }
+
+      const zoneIndex = zones.findIndex((zone) => zone.zone_key === zoneKey);
+      const resolved = COLORS[(zoneIndex >= 0 ? zoneIndex : zoneColorByKey.size) % COLORS.length];
+      zoneColorByKey.set(zoneKey, resolved);
+      return resolved;
+    };
+
     if (segments.length === 0 && isTodaySelection) {
       return zones
         .filter((zone) => zone.state === "1" && zone.current_uptime > 0)
-        .map((zone, index) => {
+        .map((zone) => {
           const end = nowSeconds;
           const start = Math.max(0, end - Math.floor(zone.current_uptime));
           const duration = Math.max(1, end - start);
@@ -187,7 +200,7 @@ export function ZoneDayTimelinePanel() {
                 start,
                 duration,
                 end,
-                color: COLORS[index % COLORS.length],
+                color: getZoneColor(zone.zone_key),
               },
             ],
           };
@@ -214,7 +227,7 @@ export function ZoneDayTimelinePanel() {
         start: segment.start_seconds,
         duration: segment.duration_seconds,
         end: segment.end_seconds,
-        color: COLORS[index % COLORS.length],
+        color: getZoneColor(key),
       });
     });
 
