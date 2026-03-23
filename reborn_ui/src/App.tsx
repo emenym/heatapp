@@ -1,7 +1,15 @@
 import { DashboardProvider, useDashboardContext } from "@/components/dashboard/DashboardContext";
+import { ConcurrencyPanel } from "@/components/dashboard/ConcurrencyPanel";
+import { CycleDurationDistributionPanel } from "@/components/dashboard/CycleDurationDistributionPanel";
 import { HeroHeader } from "@/components/dashboard/HeroHeader";
 import { MappingPanel } from "@/components/dashboard/MappingPanel";
+import { PortBitMatrixPanel } from "@/components/dashboard/PortBitMatrixPanel";
+import { RecentEventsTimelinePanel } from "@/components/dashboard/RecentEventsTimelinePanel";
+import { RuntimeCompositionPanel } from "@/components/dashboard/RuntimeCompositionPanel";
+import { RuntimeTargetsPanel } from "@/components/dashboard/RuntimeTargetsPanel";
 import { UptimeChartsPanel } from "@/components/dashboard/UptimeChartsPanel";
+import { ZoneAnomalyPanel } from "@/components/dashboard/ZoneAnomalyPanel";
+import { ZoneCalendarHeatmapPanel } from "@/components/dashboard/ZoneCalendarHeatmapPanel";
 import { ZoneDayTimelinePanel } from "@/components/dashboard/ZoneDayTimelinePanel";
 import { ZonesPanel } from "@/components/dashboard/ZonesPanel";
 
@@ -18,11 +26,22 @@ function DashboardView() {
 
       <UptimeChartsPanel />
       <ZoneDayTimelinePanel />
+      <RuntimeCompositionPanel />
 
-      <main className="grid grid-cols-[2fr_1fr] gap-4 max-[980px]:grid-cols-1">
+      <section className="grid grid-cols-1 gap-4 min-[1180px]:grid-cols-2">
+        <PortBitMatrixPanel />
+        <RecentEventsTimelinePanel />
+        <CycleDurationDistributionPanel />
+        <ConcurrencyPanel />
+        <ZoneCalendarHeatmapPanel />
+        <RuntimeTargetsPanel />
+        <ZoneAnomalyPanel />
+      </section>
+
+      <section className="grid grid-cols-[2fr_1fr] gap-4 max-[980px]:grid-cols-1">
         <ZonesPanel />
         <MappingPanel />
-      </main>
+      </section>
     </div>
   );
 }

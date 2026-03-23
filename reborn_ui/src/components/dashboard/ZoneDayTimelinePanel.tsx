@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
 import { Input } from "@/components/ui/input";
@@ -74,39 +75,29 @@ function asDuration(seconds: number): string {
 
 export function ZoneDayTimelinePanel() {
   const { zones } = useDashboardContext();
-  const [segments, setSegments] = useState<DayTimelineSegment[]>([]);
-  const [nowSeconds, setNowSeconds] = useState<number>(0);
   const [selectedDate, setSelectedDate] = useState<string>(getTodayLocalDateString());
-
-  useEffect(() => {
-    let active = true;
-
-    const fetchTimeline = async () => {
-      const tzOffsetMinutes = new Date().getTimezoneOffset();
+  const tzOffsetMinutes = new Date().getTimezoneOffset();
+  const timelineQuery = useQuery<DayTimelineResponse>({
+    queryKey: ["day-timeline", selectedDate, tzOffsetMinutes, 2000],
+    queryFn: async () => {
       const res = await fetch(
-        `/api/charts/day-timeline?date=${encodeURIComponent(selectedDate)}&tz_offset_minutes=${encodeURIComponent(String(tzOffsetMinutes))}`,
+        `/api/charts/day-timeline?date=${encodeURIComponent(selectedDate)}&tz_offset_minutes=${encodeURIComponent(String(tzOffsetMinutes))}&max_segments=2000`,
       );
       if (!res.ok) {
-        const now = new Date();
-        setNowSeconds(now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds());
-        setSegments([]);
-        return;
+        throw new Error("Unable to load day timeline");
       }
-      const body: DayTimelineResponse = await res.json();
-      if (!active) {
-        return;
-      }
-      setSegments(body.segments || []);
-      setNowSeconds(typeof body.now_seconds === "number" ? body.now_seconds : 0);
-    };
+      return res.json();
+    },
+    refetchInterval: 10000,
+    refetchIntervalInBackground: false,
+  });
 
-    void fetchTimeline();
-    const id = setInterval(() => void fetchTimeline(), 10000);
-    return () => {
-      active = false;
-      clearInterval(id);
-    };
-  }, [selectedDate]);
+  const segments = timelineQuery.data?.segments || [];
+
+  const now = new Date();
+  const fallbackNowSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  const nowSeconds =
+    typeof timelineQuery.data?.now_seconds === "number" ? timelineQuery.data.now_seconds : fallbackNowSeconds;
 
   const isTodaySelection = selectedDate === getTodayLocalDateString();
 

@@ -71,8 +71,85 @@ class RebornRepository:
 
                 CREATE INDEX IF NOT EXISTS idx_transitions_zone_key_start
                 ON transitions(zone_key, start_ts);
+
+                CREATE INDEX IF NOT EXISTS idx_transitions_start_ts
+                ON transitions(start_ts);
+
+                CREATE INDEX IF NOT EXISTS idx_transitions_stop_ts
+                ON transitions(stop_ts);
                 """
             )
+
+    def _compress_timeline_segments(self, segments, max_segments):
+        if len(segments) <= max_segments:
+            return segments
+
+        bin_seconds = 300
+        compressed = []
+
+        while True:
+            per_zone_bins = {}
+            for segment in segments:
+                zone_key = segment["zone_key"]
+                zone_name = segment["zone_name"]
+                start = int(segment["start_seconds"])
+                end = int(segment["end_seconds"])
+                if end <= start:
+                    continue
+
+                zone_data = per_zone_bins.setdefault(zone_key, {"zone_name": zone_name, "bins": set()})
+                first_bin = start // bin_seconds
+                last_bin = max(first_bin, (end - 1) // bin_seconds)
+                for bin_idx in range(first_bin, last_bin + 1):
+                    zone_data["bins"].add(bin_idx)
+
+            compressed = []
+            for zone_key, zone_data in per_zone_bins.items():
+                zone_name = zone_data["zone_name"]
+                sorted_bins = sorted(zone_data["bins"])
+                if not sorted_bins:
+                    continue
+
+                run_start = sorted_bins[0]
+                run_prev = sorted_bins[0]
+
+                for bin_idx in sorted_bins[1:]:
+                    if bin_idx == run_prev + 1:
+                        run_prev = bin_idx
+                        continue
+
+                    start_seconds = run_start * bin_seconds
+                    end_seconds = min(86400, (run_prev + 1) * bin_seconds)
+                    compressed.append(
+                        {
+                            "zone_key": zone_key,
+                            "zone_name": zone_name,
+                            "start_seconds": start_seconds,
+                            "end_seconds": end_seconds,
+                            "duration_seconds": end_seconds - start_seconds,
+                        }
+                    )
+                    run_start = bin_idx
+                    run_prev = bin_idx
+
+                start_seconds = run_start * bin_seconds
+                end_seconds = min(86400, (run_prev + 1) * bin_seconds)
+                compressed.append(
+                    {
+                        "zone_key": zone_key,
+                        "zone_name": zone_name,
+                        "start_seconds": start_seconds,
+                        "end_seconds": end_seconds,
+                        "duration_seconds": end_seconds - start_seconds,
+                    }
+                )
+
+            compressed.sort(key=lambda item: (item["zone_name"], item["start_seconds"]))
+            if len(compressed) <= max_segments or bin_seconds >= 3600:
+                break
+            bin_seconds *= 2
+
+        return compressed[:max_segments]
 
     def _validate_zone_name(self, zone_name):
         if not ZONE_NAME_RE.match(zone_name):
@@ -296,35 +373,40 @@ class RebornRepository:
         return int((datetime.datetime.utcnow() - start).total_seconds())
 
     def total_runtime_seconds(self):
-        now = datetime.datetime.utcnow()
-        out = {}
+        now_iso = utcnow_iso()
         with self.connect() as con:
-            rows = con.execute("SELECT zone_key, start_ts, stop_ts FROM transitions").fetchall()
-        for row in rows:
-            start = datetime.datetime.fromisoformat(row["start_ts"].replace("Z", ""))
-            stop = row["stop_ts"]
-            stop_dt = datetime.datetime.fromisoformat(stop.replace("Z", "")) if stop else now
-            out[row["zone_key"]] = out.get(row["zone_key"], 0) + int((stop_dt - start).total_seconds())
-        return out
+            rows = con.execute(
+                """
+                SELECT zone_key,
+                       CAST(SUM((julianday(COALESCE(stop_ts, ?)) - julianday(start_ts)) * 86400) AS INTEGER) AS seconds
+                FROM transitions
+                GROUP BY zone_key
+                """,
+                (now_iso,),
+            ).fetchall()
+        return {row["zone_key"]: max(0, int(row["seconds"] or 0)) for row in rows}
 
     def day_runtime_seconds(self):
-        now = datetime.datetime.utcnow()
-        day_ago = now - datetime.timedelta(hours=24)
-        out = {}
-        with self.connect() as con:
-            rows = con.execute("SELECT zone_key, start_ts, stop_ts FROM transitions").fetchall()
-        for row in rows:
-            start = datetime.datetime.fromisoformat(row["start_ts"].replace("Z", ""))
-            stop = row["stop_ts"]
-            stop_dt = datetime.datetime.fromisoformat(stop.replace("Z", "")) if stop else now
-            seg_start = max(start, day_ago)
-            seg_stop = min(stop_dt, now)
-            if seg_stop <= day_ago or seg_stop <= seg_start:
-                continue
-            out[row["zone_key"]] = out.get(row["zone_key"], 0) + int((seg_stop - seg_start).total_seconds())
-        return out
+        now = datetime.datetime.utcnow().replace(microsecond=0)
+        now_iso = now.isoformat() + "Z"
+        day_ago_iso = (now - datetime.timedelta(hours=24)).isoformat() + "Z"
 
-    def day_timeline_segments(self, target_date=None, tz_offset_minutes=0):
+        with self.connect() as con:
+            rows = con.execute(
+                """
+                SELECT zone_key,
+                       CAST(SUM((julianday(MIN(COALESCE(stop_ts, ?), ?)) - julianday(MAX(start_ts, ?))) * 86400) AS INTEGER) AS seconds
+                FROM transitions
+                WHERE start_ts < ?
+                  AND COALESCE(stop_ts, ?) > ?
+                GROUP BY zone_key
+                """,
+                (now_iso, now_iso, day_ago_iso, now_iso, now_iso, day_ago_iso),
+            ).fetchall()
+
+        return {row["zone_key"]: max(0, int(row["seconds"] or 0)) for row in rows}
+
+    def day_timeline_segments(self, target_date=None, tz_offset_minutes=0, max_segments=2000):
         now_utc = datetime.datetime.utcnow()
         offset = datetime.timedelta(minutes=int(tz_offset_minutes))
 
@@ -346,8 +428,15 @@ class RebornRepository:
                 SELECT t.zone_key, z.zone_name, t.start_ts, t.stop_ts
                 FROM transitions t
                 JOIN zones z ON z.zone_key = t.zone_key
+                WHERE t.start_ts < ?
+                  AND COALESCE(t.stop_ts, ?) > ?
                 ORDER BY z.zone_name, t.start_ts
-                """
+                """,
+                (
+                    effective_end_utc.replace(microsecond=0).isoformat() + "Z",
+                    now_utc.replace(microsecond=0).isoformat() + "Z",
+                    day_start_utc.replace(microsecond=0).isoformat() + "Z",
+                ),
             ).fetchall()
             active_rows = []
             if is_today:
@@ -407,6 +496,8 @@ class RebornRepository:
             )
 
         out.sort(key=lambda item: (item["zone_name"], item["start_seconds"]))
+        max_segments = max(100, int(max_segments))
+        out = self._compress_timeline_segments(out, max_segments)
 
         if is_today:
             now_seconds = int((local_now - day_start_local).total_seconds())
@@ -418,5 +509,147 @@ class RebornRepository:
             "selected_date": date_value.isoformat(),
             "is_today": is_today,
             "now_seconds": max(0, min(86399, now_seconds)),
+            "max_segments": max_segments,
             "segments": out,
+        }
+
+    def daily_uptime_series(self, days=35, tz_offset_minutes=0):
+        days = max(1, int(days))
+        now_utc = datetime.datetime.utcnow()
+        offset = datetime.timedelta(minutes=int(tz_offset_minutes))
+        local_now = now_utc - offset
+        end_date = local_now.date()
+        start_date = end_date - datetime.timedelta(days=days - 1)
+
+        dates = [start_date + datetime.timedelta(days=i) for i in range(days)]
+
+        range_start_utc = datetime.datetime.combine(start_date, datetime.time.min) + offset
+        range_end_utc = datetime.datetime.combine(end_date + datetime.timedelta(days=1), datetime.time.min) + offset
+
+        with self.connect() as con:
+            zone_rows = con.execute(
+                """
+                SELECT z.zone_key, z.zone_name, hm.port, hm.bit
+                FROM zones z
+                JOIN hardware_map hm ON hm.zone_key = z.zone_key
+                ORDER BY hm.port, hm.bit
+                """
+            ).fetchall()
+            transition_rows = con.execute(
+                """
+                SELECT zone_key, start_ts, stop_ts
+                FROM transitions
+                WHERE start_ts < ?
+                  AND COALESCE(stop_ts, ?) > ?
+                ORDER BY zone_key, start_ts
+                """
+                ,
+                (
+                    range_end_utc.replace(microsecond=0).isoformat() + "Z",
+                    now_utc.replace(microsecond=0).isoformat() + "Z",
+                    range_start_utc.replace(microsecond=0).isoformat() + "Z",
+                )
+            ).fetchall()
+
+        seconds_by_zone = {
+            row["zone_key"]: [0 for _ in dates]
+            for row in zone_rows
+        }
+
+        for row in transition_rows:
+            zone_key = row["zone_key"]
+            if zone_key not in seconds_by_zone:
+                continue
+
+            start = datetime.datetime.fromisoformat(row["start_ts"].replace("Z", ""))
+            stop = row["stop_ts"]
+            stop_dt = datetime.datetime.fromisoformat(stop.replace("Z", "")) if stop else now_utc
+            if stop_dt <= start:
+                continue
+
+            for i, day in enumerate(dates):
+                day_start_local = datetime.datetime.combine(day, datetime.time.min)
+                day_end_local = day_start_local + datetime.timedelta(days=1)
+                day_start_utc = day_start_local + offset
+                day_end_utc = day_end_local + offset
+
+                seg_start = max(start, day_start_utc)
+                seg_stop = min(stop_dt, day_end_utc)
+                if seg_stop <= seg_start:
+                    continue
+                seconds_by_zone[zone_key][i] += int((seg_stop - seg_start).total_seconds())
+
+        zones = []
+        for row in zone_rows:
+            zone_key = row["zone_key"]
+            zones.append(
+                {
+                    "zone_key": zone_key,
+                    "zone_name": row["zone_name"],
+                    "port": row["port"],
+                    "bit": row["bit"],
+                    "seconds_by_day": seconds_by_zone.get(zone_key, [0 for _ in dates]),
+                }
+            )
+
+        return {
+            "dates": [d.isoformat() for d in dates],
+            "zones": zones,
+        }
+
+    def recent_transition_events(self, minutes=180, tz_offset_minutes=0, max_events=2000):
+        minutes = max(1, int(minutes))
+        max_events = max(100, int(max_events))
+        now_utc = datetime.datetime.utcnow()
+        since_utc = now_utc - datetime.timedelta(minutes=minutes)
+        offset = datetime.timedelta(minutes=int(tz_offset_minutes))
+
+        with self.connect() as con:
+            rows = con.execute(
+                """
+                SELECT t.zone_key, z.zone_name, t.start_ts, t.stop_ts
+                FROM transitions t
+                JOIN zones z ON z.zone_key = t.zone_key
+                WHERE t.start_ts >= ? OR (t.stop_ts IS NOT NULL AND t.stop_ts >= ?)
+                ORDER BY t.start_ts ASC
+                """,
+                (since_utc.replace(microsecond=0).isoformat() + "Z", since_utc.replace(microsecond=0).isoformat() + "Z"),
+            ).fetchall()
+
+        events = []
+        for row in rows:
+            start_dt = datetime.datetime.fromisoformat(row["start_ts"].replace("Z", ""))
+            if start_dt >= since_utc:
+                local_dt = start_dt - offset
+                events.append(
+                    {
+                        "zone_key": row["zone_key"],
+                        "zone_name": row["zone_name"],
+                        "state": "1",
+                        "ts": row["start_ts"],
+                        "ts_local": local_dt.replace(microsecond=0).isoformat(),
+                    }
+                )
+
+            if row["stop_ts"]:
+                stop_dt = datetime.datetime.fromisoformat(row["stop_ts"].replace("Z", ""))
+                if stop_dt >= since_utc:
+                    local_dt = stop_dt - offset
+                    events.append(
+                        {
+                            "zone_key": row["zone_key"],
+                            "zone_name": row["zone_name"],
+                            "state": "0",
+                            "ts": row["stop_ts"],
+                            "ts_local": local_dt.replace(microsecond=0).isoformat(),
+                        }
+                    )
+
+        events.sort(key=lambda item: item["ts"])
+        if len(events) > max_events:
+            events = events[-max_events:]
+        return {
+            "window_minutes": minutes,
+            "max_events": max_events,
+            "events": events,
         }

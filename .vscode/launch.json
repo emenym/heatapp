@@ -68,7 +68,8 @@
                 "REBORN_PORT": "8081",
                 "REBORN_DB_PATH": "${workspaceFolder}/reborn_data/heat_reborn.sqlite3",
                 "REBORN_ZONE_SEED": "${workspaceFolder}/zones.json",
-                "REBORN_DEBUG": "1"
+                "REBORN_DEBUG": "1",
+                "DEBUG": "True",
             }
         },
         {

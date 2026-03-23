@@ -136,21 +136,53 @@ def set_mapping():
 @app.route("/api/charts/day-timeline", methods=["GET"])
 def day_timeline_chart_data():
     tz_offset_minutes = request.args.get("tz_offset_minutes", default="0")
+    max_segments = request.args.get("max_segments", default="2000")
     try:
         tz_offset_minutes = int(tz_offset_minutes)
+        max_segments = int(max_segments)
     except ValueError:
-        return jsonify({"error": "tz_offset_minutes must be an integer"}), 400
+        return jsonify({"error": "tz_offset_minutes and max_segments must be integers"}), 400
 
     date_str = request.args.get("date")
     if not date_str:
-        return jsonify(repo.day_timeline_segments(tz_offset_minutes=tz_offset_minutes))
+        return jsonify(repo.day_timeline_segments(tz_offset_minutes=tz_offset_minutes, max_segments=max_segments))
 
     try:
         selected_date = datetime.date.fromisoformat(date_str)
     except ValueError:
         return jsonify({"error": "date must be YYYY-MM-DD"}), 400
 
-    return jsonify(repo.day_timeline_segments(selected_date, tz_offset_minutes=tz_offset_minutes))
+    return jsonify(repo.day_timeline_segments(selected_date, tz_offset_minutes=tz_offset_minutes, max_segments=max_segments))
+
+
+@app.route("/api/charts/daily-uptime", methods=["GET"])
+def daily_uptime_chart_data():
+    tz_offset_minutes = request.args.get("tz_offset_minutes", default="0")
+    days = request.args.get("days", default="35")
+
+    try:
+        tz_offset_minutes = int(tz_offset_minutes)
+        days = int(days)
+    except ValueError:
+        return jsonify({"error": "tz_offset_minutes and days must be integers"}), 400
+
+    return jsonify(repo.daily_uptime_series(days=days, tz_offset_minutes=tz_offset_minutes))
+
+
+@app.route("/api/charts/recent-events", methods=["GET"])
+def recent_events_chart_data():
+    tz_offset_minutes = request.args.get("tz_offset_minutes", default="0")
+    minutes = request.args.get("minutes", default="180")
+    max_events = request.args.get("max_events", default="2000")
+
+    try:
+        tz_offset_minutes = int(tz_offset_minutes)
+        minutes = int(minutes)
+        max_events = int(max_events)
+    except ValueError:
+        return jsonify({"error": "tz_offset_minutes, minutes, and max_events must be integers"}), 400
+
+    return jsonify(repo.recent_transition_events(minutes=minutes, tz_offset_minutes=tz_offset_minutes, max_events=max_events))
 
 
 if __name__ == "__main__":
