@@ -15,6 +15,12 @@
 
 {% block content %}
   {{ super() }}
+    <div class="container mt-3">
+        <div class="alert alert-info d-flex align-items-center justify-content-between" role="alert">
+            <div>Looking for the new dashboard experience?</div>
+            <a id="reborn-app-link" class="btn btn-sm btn-primary" href="http://localhost:5173" target="_blank" rel="noopener noreferrer">Open Reborn App</a>
+        </div>
+    </div>
   <div class="container table-responsive">
   <table class="table">
       <tbody>
@@ -32,6 +38,15 @@
   </table>
 </div>
 <script>
+    (function() {
+        var protocol = window.location.protocol;
+        var hostname = window.location.hostname;
+        var rebornLink = document.getElementById("reborn-app-link");
+        if (rebornLink && hostname) {
+            rebornLink.href = protocol + "//" + hostname + ":5173";
+        }
+    })();
+
     $(document).ready(function(){
         setInterval(function(){
             $.ajax({
