@@ -50,8 +50,6 @@ export function ZonesPanel() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Port</TableHead>
-              <TableHead>Bit</TableHead>
               <TableHead>Zone Key</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>State</TableHead>
@@ -64,8 +62,6 @@ export function ZonesPanel() {
           <TableBody>
             {zones.map((zone) => (
               <TableRow key={zone.zone_key}>
-                <TableCell>{zone.port}</TableCell>
-                <TableCell>{zone.bit}</TableCell>
                 <TableCell className="font-mono">{zone.zone_key}</TableCell>
                 <TableCell>{zone.zone_name}</TableCell>
                 <TableCell>
