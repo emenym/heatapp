@@ -1,6 +1,7 @@
 import { DashboardProvider, useDashboardContext } from "@/components/dashboard/DashboardContext";
 import { ConcurrencyPanel } from "@/components/dashboard/ConcurrencyPanel";
 import { CycleDurationDistributionPanel } from "@/components/dashboard/CycleDurationDistributionPanel";
+import { GraphqlDemoPanel } from "@/components/dashboard/GraphqlDemoPanel";
 import { HeroHeader } from "@/components/dashboard/HeroHeader";
 import { MappingPanel } from "@/components/dashboard/MappingPanel";
 import { PortBitMatrixPanel } from "@/components/dashboard/PortBitMatrixPanel";
@@ -32,6 +33,7 @@ function DashboardView() {
       <UptimeChartsPanel />
       <ZoneDayTimelinePanel />
       <RuntimeCompositionPanel />
+      <GraphqlDemoPanel />
 
       <section className="grid grid-cols-1 gap-4 min-[1180px]:grid-cols-2">
         <PortBitMatrixPanel />

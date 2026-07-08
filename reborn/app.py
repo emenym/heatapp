@@ -4,6 +4,7 @@ import time
 
 from flask import Flask, jsonify, request
 from flask_sock import Sock
+import graphene
 from simple_websocket import ConnectionClosed
 
 from reborn.config import DB_PATH, PORT, ZONE_SEED_PATH
@@ -52,6 +53,99 @@ def _dashboard_snapshot():
         "zones": _zone_payload(),
         "mapping": repo.list_mapping(),
     }
+
+
+def _normalize_graphql_state_arg(state):
+    normalized = (state or "ANY").strip().upper()
+    if normalized not in {"ANY", "ON", "OFF"}:
+        raise ValueError("state must be one of ANY, ON, or OFF")
+    return normalized
+
+
+def _filter_zones_for_graphql(limit=None, state="ANY", contains=None):
+    normalized_state = _normalize_graphql_state_arg(state)
+    items = _zone_payload()
+
+    if normalized_state == "ON":
+        items = [item for item in items if item["state"] == "1"]
+    elif normalized_state == "OFF":
+        items = [item for item in items if item["state"] == "0"]
+
+    if contains:
+        needle = contains.strip().lower()
+        if needle:
+            items = [
+                item
+                for item in items
+                if needle in item["zone_name"].lower() or needle in item["zone_key"].lower()
+            ]
+
+    if isinstance(limit, int) and limit > 0:
+        return items[:limit]
+    return items
+
+
+class ZoneType(graphene.ObjectType):
+    zone_key = graphene.String(required=True)
+    zone_name = graphene.String(required=True)
+    port = graphene.String(required=True)
+    bit = graphene.Int(required=True)
+    state = graphene.String(required=True)
+    current_uptime = graphene.Int(required=True)
+    day_uptime = graphene.Int(required=True)
+    total_uptime = graphene.Int(required=True)
+    enabled = graphene.Boolean(required=True)
+    active = graphene.Boolean(required=True)
+
+
+class GraphqlDemoType(graphene.ObjectType):
+    message = graphene.String(required=True)
+    total_zones = graphene.Int(required=True)
+    online_zones = graphene.Int(required=True)
+    sample_zone_keys = graphene.List(graphene.String, required=True)
+
+
+class Query(graphene.ObjectType):
+    server_time = graphene.String(required=True)
+    zones = graphene.List(
+        ZoneType,
+        limit=graphene.Int(default_value=10),
+        state=graphene.String(default_value="ANY"),
+        contains=graphene.String(),
+    )
+    zone = graphene.Field(ZoneType, zone_key=graphene.String(required=True))
+    demo_summary = graphene.Field(
+        GraphqlDemoType,
+        sample_size=graphene.Int(default_value=5),
+        state=graphene.String(default_value="ANY"),
+    )
+
+    def resolve_server_time(self, info):
+        return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+    def resolve_zones(self, info, limit=10, state="ANY", contains=None):
+        return _filter_zones_for_graphql(limit=limit, state=state, contains=contains)
+
+    def resolve_zone(self, info, zone_key):
+        rows = _filter_zones_for_graphql(limit=None, state="ANY", contains=zone_key)
+        for row in rows:
+            if row["zone_key"] == zone_key:
+                return row
+        return None
+
+    def resolve_demo_summary(self, info, sample_size=5, state="ANY"):
+        zones = _filter_zones_for_graphql(limit=None, state=state, contains=None)
+        sample_size = max(1, min(20, int(sample_size)))
+        sample = zones[:sample_size]
+        return {
+            "message": "GraphQL lets clients pick the exact fields and shape they need.",
+            "total_zones": len(zones),
+            "online_zones": len([zone for zone in zones if zone["state"] == "1"]),
+            "sample_zone_keys": [zone["zone_key"] for zone in sample],
+        }
+
+
+graphql_schema = graphene.Schema(query=Query, auto_camelcase=True)
 
 
 def _bounded_int(raw_value, fallback, minimum, maximum):
@@ -119,6 +213,53 @@ def options_rename(zone_key):
 @app.route("/api/mapping", methods=["GET"])
 def get_mapping():
     return jsonify({"mapping": repo.list_mapping()})
+
+
+@app.route("/api/graphql", methods=["GET"])
+def graphql_info():
+    return jsonify(
+        {
+            "service": "heatapp-reborn-graphql",
+            "usage": "POST /api/graphql with { query, variables?, operationName? }",
+            "example": {
+                "query": "query Demo($state: String!) { demoSummary(state: $state) { message totalZones onlineZones sampleZoneKeys } zones(limit: 4, state: $state) { zoneKey zoneName state } }",
+                "variables": {"state": "ON"},
+            },
+        }
+    )
+
+
+@app.route("/api/graphql", methods=["POST"])
+def graphql_query():
+    body = request.get_json(force=True, silent=True) or {}
+    query = body.get("query")
+    variables = body.get("variables")
+    operation_name = body.get("operationName")
+
+    if not query or not isinstance(query, str):
+        return jsonify({"errors": [{"message": "query must be a non-empty string"}]}), 400
+
+    result = graphql_schema.execute(
+        query,
+        variable_values=variables,
+        operation_name=operation_name,
+    )
+
+    payload = {}
+    status = 200
+
+    if result.errors:
+        payload["errors"] = [{"message": str(error)} for error in result.errors]
+        status = 400
+    if result.data is not None:
+        payload["data"] = result.data
+
+    return jsonify(payload), status
+
+
+@app.route("/api/graphql", methods=["OPTIONS"])
+def graphql_options():
+    return ("", 204)
 
 
 @sock.route("/ws/dashboard")
