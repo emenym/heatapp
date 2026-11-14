@@ -3,6 +3,7 @@ import type { SyntheticEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   ApiErrorResponse,
+  DataRange,
   MappingItem,
   MapFormState,
   Port,
@@ -24,6 +25,7 @@ export function useDashboardData() {
   const [lastStreamMessageAt, setLastStreamMessageAt] = useState<number | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [mapping, setMapping] = useState<MappingItem[]>([]);
+  const [dataRange, setDataRange] = useState<DataRange | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [streamError, setStreamError] = useState<string>("");
 
@@ -36,10 +38,11 @@ export function useDashboardData() {
       throw new Error("Failed to load mapping");
     }
 
-    const zonesData = (await zonesRes.json()) as { zones?: Zone[] };
+    const zonesData = (await zonesRes.json()) as { zones?: Zone[]; data_range?: DataRange };
     const mapData = (await mapRes.json()) as { mapping?: MappingItem[] };
 
     setZones((zonesData.zones || []).slice().sort(sortByPortBit));
+    setDataRange(zonesData.data_range ?? null);
     setMapping((mapData.mapping || []).slice().sort(sortByPortBit));
   };
 
@@ -81,8 +84,10 @@ export function useDashboardData() {
           const payload = JSON.parse(event.data) as {
             zones?: Zone[];
             mapping?: MappingItem[];
+            data_range?: DataRange;
           };
           setZones((payload.zones || []).slice().sort(sortByPortBit));
+          setDataRange(payload.data_range ?? null);
           setMapping((payload.mapping || []).slice().sort(sortByPortBit));
           setLastStreamMessageAt(Date.now());
           setLoading(false);
@@ -234,6 +239,7 @@ export function useDashboardData() {
     mapForm,
     zoneCount,
     onlineCount,
+    dataRange,
     setRenameDraft,
     setMapForm,
     pollIntervalMs,

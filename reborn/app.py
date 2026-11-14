@@ -52,6 +52,7 @@ def _dashboard_snapshot():
     return {
         "zones": _zone_payload(),
         "mapping": repo.list_mapping(),
+        "data_range": repo.runtime_data_range(),
     }
 
 
@@ -168,7 +169,7 @@ def health():
 
 @app.route("/api/zones", methods=["GET"])
 def list_zones():
-    return jsonify({"zones": _zone_payload()})
+    return jsonify({"zones": _zone_payload(), "data_range": repo.runtime_data_range()})
 
 
 @app.route("/api/zones", methods=["OPTIONS"])

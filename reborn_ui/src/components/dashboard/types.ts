@@ -11,6 +11,11 @@ export type Zone = {
   total_uptime: number;
 };
 
+export type DataRange = {
+  first: string | null;
+  last: string | null;
+};
+
 export type MappingItem = {
   port: Port;
   bit: number;

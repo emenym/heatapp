@@ -20,6 +20,7 @@ const fallbackContext: DashboardContextValue = {
   },
   zoneCount: 0,
   onlineCount: 0,
+  dataRange: null,
   setRenameDraft: () => {},
   setMapForm: () => {},
   pollIntervalMs: 10000,

@@ -386,6 +386,15 @@ class RebornRepository:
             ).fetchall()
         return {row["zone_key"]: max(0, int(row["seconds"] or 0)) for row in rows}
 
+    def runtime_data_range(self):
+        now_iso = utcnow_iso()
+        with self.connect() as con:
+            row = con.execute(
+                "SELECT MIN(start_ts) AS first_ts, MAX(COALESCE(stop_ts, ?)) AS last_ts FROM transitions",
+                (now_iso,),
+            ).fetchone()
+        return {"first": row["first_ts"], "last": row["last_ts"]}
+
     def day_runtime_seconds(self):
         now = datetime.datetime.utcnow().replace(microsecond=0)
         now_iso = now.isoformat() + "Z"

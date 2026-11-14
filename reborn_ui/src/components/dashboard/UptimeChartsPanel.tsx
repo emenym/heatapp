@@ -117,12 +117,28 @@ function ChartPanel({ title, metric }: ChartPanelProps) {
   );
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function formatDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
 export function UptimeChartsPanel() {
+  const { dataRange } = useDashboardContext();
+  const totalTitle =
+    dataRange?.first && dataRange?.last
+      ? `Total Uptime (${formatDate(dataRange.first)} – ${formatDate(dataRange.last)})`
+      : "Total Uptime (N/A)";
+
   return (
     <section className="grid gap-4">
       <ChartPanel title="Uptime" metric="current_uptime" />
       <ChartPanel title="Uptime over the last 24 hours" metric="day_uptime" />
-      <ChartPanel title="Total Uptime" metric="total_uptime" />
+      <ChartPanel title={totalTitle} metric="total_uptime" />
     </section>
   );
 }
