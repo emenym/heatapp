@@ -7,6 +7,7 @@ import {
   BarChart,
   CartesianGrid,
   Rectangle,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -39,11 +40,80 @@ type TimelineRow = {
     duration: number;
     end: number;
     color: string;
+    unoccupied: boolean;
   }>;
+  unoccupiedSeconds: number;
 };
 
 const COLORS = ["#f59e0b", "#22c55e", "#60a5fa", "#f97316", "#14b8a6", "#f43f5e", "#eab308", "#a78bfa"];
 const DEFAULT_MIN_TRANSITION_SECONDS = 2;
+const UNOCCUPIED_COLOR = "#ef4444";
+const SCHEDULE_STORAGE_KEY = "heat.unoccupiedSchedule";
+const DEFAULT_SCHEDULE = { start: "08:00", end: "17:00" };
+
+function parseClock(value: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  return match ? Number(match[1]) * 3600 + Number(match[2]) * 60 : null;
+}
+
+// Returns [start, end] ranges within one day; a schedule that crosses midnight is split in two.
+function unoccupiedRanges(startClock: string, endClock: string): Array<[number, number]> {
+  const start = parseClock(startClock);
+  const end = parseClock(endClock);
+  if (start === null || end === null || start === end) {
+    return [];
+  }
+  return start < end
+    ? [[start, end]]
+    : [
+        [0, end],
+        [start, 86400],
+      ];
+}
+
+function loadSchedule(): { start: string; end: string } {
+  try {
+    const raw = window.localStorage.getItem(SCHEDULE_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && parseClock(parsed.start) !== null && parseClock(parsed.end) !== null) {
+      return { start: parsed.start, end: parsed.end };
+    }
+  } catch {
+    // fall through to default
+  }
+  return DEFAULT_SCHEDULE;
+}
+
+// Splits an ON window into occupied / unoccupied pieces so the unoccupied heating stands out.
+function splitWindow<T extends { id: string; start: number; end: number; duration: number }>(
+  window: T,
+  ranges: Array<[number, number]>,
+): Array<T & { unoccupied: boolean }> {
+  const cuts = new Set<number>([window.start, window.end]);
+  ranges.forEach(([a, b]) => {
+    [a, b].forEach((edge) => {
+      if (edge > window.start && edge < window.end) {
+        cuts.add(edge);
+      }
+    });
+  });
+  const points = Array.from(cuts).sort((a, b) => a - b);
+  const pieces: Array<T & { unoccupied: boolean }> = [];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const start = points[i];
+    const end = points[i + 1];
+    const mid = (start + end) / 2;
+    pieces.push({
+      ...window,
+      id: `${window.id}-${i}`,
+      start,
+      end,
+      duration: end - start,
+      unoccupied: ranges.some(([a, b]) => mid >= a && mid < b),
+    });
+  }
+  return pieces;
+}
 
 function getTodayLocalDateString(): string {
   const now = new Date();
@@ -81,6 +151,13 @@ export function ZoneDayTimelinePanel() {
   const [timelineLoading, setTimelineLoading] = useState<boolean>(true);
   const [timelineError, setTimelineError] = useState<string>("");
   const tzOffsetMinutes = new Date().getTimezoneOffset();
+  const [schedule, setSchedule] = useState(loadSchedule);
+
+  useEffect(() => {
+    window.localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
+  }, [schedule]);
+
+  const ranges = useMemo(() => unoccupiedRanges(schedule.start, schedule.end), [schedule]);
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -166,7 +243,7 @@ export function ZoneDayTimelinePanel() {
 
   const isTodaySelection = selectedDate === getTodayLocalDateString();
 
-  const rows = useMemo<TimelineRow[]>(() => {
+  const baseRows = useMemo<TimelineRow[]>(() => {
     const zoneColorByKey = new Map<string, string>();
     const getZoneColor = (zoneKey: string): string => {
       const existing = zoneColorByKey.get(zoneKey);
@@ -201,8 +278,10 @@ export function ZoneDayTimelinePanel() {
                 duration,
                 end,
                 color: getZoneColor(zone.zone_key),
+                unoccupied: false,
               },
             ],
+            unoccupiedSeconds: 0,
           };
         })
         .filter((row): row is TimelineRow => row !== null);
@@ -219,6 +298,7 @@ export function ZoneDayTimelinePanel() {
           zone,
           laneSpan: 86400,
           windows: [],
+          unoccupiedSeconds: 0,
         });
       }
 
@@ -228,6 +308,7 @@ export function ZoneDayTimelinePanel() {
         duration: segment.duration_seconds,
         end: segment.end_seconds,
         color: getZoneColor(key),
+        unoccupied: false,
       });
     });
 
@@ -239,12 +320,30 @@ export function ZoneDayTimelinePanel() {
       .filter((row) => row.windows.length > 0);
   }, [isTodaySelection, minTransitionSeconds, nowSeconds, segments, zones]);
 
+  const rows = useMemo<TimelineRow[]>(
+    () =>
+      baseRows
+        .map((row) => {
+          const windows = row.windows.flatMap((window) =>
+            splitWindow(window, ranges).map((piece) => ({
+              ...piece,
+              color: piece.unoccupied ? UNOCCUPIED_COLOR : window.color,
+            })),
+          );
+          const unoccupiedSeconds = windows.reduce((sum, w) => sum + (w.unoccupied ? w.duration : 0), 0);
+          return { ...row, windows, unoccupiedSeconds };
+        })
+        .sort((a, b) => b.unoccupiedSeconds - a.unoccupiedSeconds),
+    [baseRows, ranges],
+  );
+  const offenders = rows.filter((row) => row.unoccupiedSeconds > 0);
+
   return (
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
         <div className="flex items-end justify-between gap-3 max-[640px]:flex-col max-[640px]:items-start">
           <CardTitle>Zone On-Times {!isTodaySelection && `(${selectedDate})`}{isTodaySelection && "(Today)"}</CardTitle>
-          <div className="flex w-full max-w-[31rem] gap-3 max-[640px]:max-w-full max-[480px]:flex-col">
+          <div className="flex w-full max-w-[46rem] gap-3 max-[640px]:max-w-full max-[480px]:flex-col">
             <div className="w-full max-w-56">
               <p className="mb-1 text-xs text-slate-300">Date (Local)</p>
               <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
@@ -262,6 +361,21 @@ export function ZoneDayTimelinePanel() {
                 }}
               />
             </div>
+            <div className="w-full max-w-60">
+              <p className="mb-1 text-xs text-slate-300">Unoccupied (From / To)</p>
+              <div className="flex gap-2">
+                <Input
+                  type="time"
+                  value={schedule.start}
+                  onChange={(e) => parseClock(e.target.value) !== null && setSchedule({ ...schedule, start: e.target.value })}
+                />
+                <Input
+                  type="time"
+                  value={schedule.end}
+                  onChange={(e) => parseClock(e.target.value) !== null && setSchedule({ ...schedule, end: e.target.value })}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -270,6 +384,21 @@ export function ZoneDayTimelinePanel() {
         {timelineError ? <p className="text-sm text-amber-200">{timelineError}</p> : null}
         {rows.length === 0 ? (
           <p className="text-sm text-slate-300">No ON periods recorded for {selectedDate}.</p>
+        ) : null}
+
+        {offenders.length > 0 ? (
+          <div className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+            <p className="font-semibold">Heating while unoccupied ({schedule.start}–{schedule.end})</p>
+            <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+              {offenders.map((row) => (
+                <li key={row.zoneKey}>
+                  {row.zone}: {asDuration(row.unoccupiedSeconds)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : rows.length > 0 ? (
+          <p className="text-sm text-emerald-300">No zones heated during the unoccupied window.</p>
         ) : null}
 
         <div className="h-[340px] w-full">
@@ -288,6 +417,9 @@ export function ZoneDayTimelinePanel() {
                 tick={{ fill: "#cbd5e1", fontSize: 12 }}
                 width={160}
               />
+              {ranges.map(([from, to]) => (
+                <ReferenceArea key={`${from}-${to}`} x1={from} x2={to} fill="#ef4444" fillOpacity={0.08} stroke="none" />
+              ))}
               <ReferenceLine
                 x={nowSeconds}
                 stroke="#f43f5e"
@@ -318,6 +450,7 @@ export function ZoneDayTimelinePanel() {
                       {row.windows.slice(0, 4).map((window) => (
                         <div key={window.id} style={{ color: "#f8fafc" }}>
                           {asLocalTimeLabel(window.start)} - {asLocalTimeLabel(window.end)} ({asDuration(window.duration)})
+                          {window.unoccupied ? " – unoccupied" : ""}
                         </div>
                       ))}
                       {row.windows.length > 4 ? <div style={{ color: "#cbd5e1" }}>+{row.windows.length - 4} more...</div> : null}
@@ -353,7 +486,7 @@ export function ZoneDayTimelinePanel() {
         </div>
 
         <p className="text-xs text-slate-400">
-          Timeline is displayed in your browser local time for {selectedDate}. Marker: {asLocalTimeLabel(nowSeconds)}.
+          Timeline is displayed in your browser local time for {selectedDate}. Marker: {asLocalTimeLabel(nowSeconds)}. Red shading and red bars mark heating during the unoccupied window (saved in this browser).
         </p>
       </CardContent>
     </Card>
