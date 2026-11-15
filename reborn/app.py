@@ -382,6 +382,33 @@ def day_timeline_chart_data():
     return jsonify(repo.day_timeline_segments(selected_date, tz_offset_minutes=tz_offset_minutes, max_segments=max_segments))
 
 
+@app.route("/api/charts/cycle-indicators", methods=["GET"])
+def cycle_indicators():
+    limits = {
+        "pulse_max_seconds": (5, 1, 300),
+        "short_max_minutes": (5, 1, 1440),
+        "pulse_window_hours": (24, 1, 168),
+        "short_window_minutes": (60, 1, 10080),
+    }
+    values = {}
+    for name, (default, minimum, maximum) in limits.items():
+        try:
+            value = int(request.args.get(name, default))
+        except (TypeError, ValueError):
+            return jsonify({"error": f"{name} must be an integer"}), 400
+        if not minimum <= value <= maximum:
+            return jsonify({"error": f"{name} must be between {minimum} and {maximum}"}), 400
+        values[name] = value
+    if values["pulse_max_seconds"] >= values["short_max_minutes"] * 60:
+        return jsonify({"error": "Short-call duration must exceed the brief-pulse duration"}), 400
+    return jsonify(repo.cycle_indicator_counts(
+        values["pulse_max_seconds"],
+        values["short_max_minutes"] * 60,
+        values["pulse_window_hours"] * 60,
+        values["short_window_minutes"],
+    ))
+
+
 @app.route("/api/charts/daily-uptime", methods=["GET"])
 def daily_uptime_chart_data():
     tz_offset_minutes = request.args.get("tz_offset_minutes", default="0")

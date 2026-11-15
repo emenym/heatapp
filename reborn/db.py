@@ -401,6 +401,34 @@ class RebornRepository:
             ).fetchone()
         return dict(row) if row else None
 
+    def cycle_indicator_counts(self, pulse_max_seconds, short_max_seconds, pulse_window_minutes, short_window_minutes):
+        now = datetime.datetime.fromisoformat(utcnow_iso().replace("Z", ""))
+        now_iso = now.isoformat() + "Z"
+        pulse_start = (now - datetime.timedelta(minutes=pulse_window_minutes)).isoformat() + "Z"
+        short_start = (now - datetime.timedelta(minutes=short_window_minutes)).isoformat() + "Z"
+        with self.connect() as con:
+            rows = con.execute(
+                """
+                WITH completed AS (
+                    SELECT zone_key, stop_ts,
+                           CAST(strftime('%s', stop_ts) AS INTEGER) -
+                           CAST(strftime('%s', start_ts) AS INTEGER) AS duration_seconds
+                    FROM transitions
+                    WHERE stop_ts IS NOT NULL AND stop_ts >= ? AND stop_ts <= ?
+                )
+                SELECT zone_key,
+                       SUM(CASE WHEN stop_ts >= ? AND duration_seconds BETWEEN 0 AND ?
+                                THEN 1 ELSE 0 END) AS brief_pulses,
+                       SUM(CASE WHEN stop_ts >= ? AND duration_seconds > ? AND duration_seconds < ?
+                                THEN 1 ELSE 0 END) AS short_calls
+                FROM completed
+                GROUP BY zone_key
+                """,
+                (min(pulse_start, short_start), now_iso, pulse_start, pulse_max_seconds,
+                 short_start, pulse_max_seconds, short_max_seconds),
+            ).fetchall()
+        return {"as_of": now_iso, "zones": [dict(row) for row in rows]}
+
     def current_uptime_seconds(self, zone_key):
         with self.connect() as con:
             row = con.execute(

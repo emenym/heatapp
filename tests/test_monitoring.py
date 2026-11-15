@@ -65,6 +65,72 @@ class MonitoringTests(unittest.TestCase):
             self.assertEqual(payload["monitoring"]["sample_source"], "mock")
             self.assertEqual(api._dashboard_snapshot()["monitoring"], payload["monitoring"])
 
+    def test_cycle_indicators_use_completed_calls_and_rolling_boundaries(self):
+        now = datetime.datetime(2026, 1, 2, 12, 0)
+        events = [
+            (20, 5), (86400, 5), (86401, 5),
+            (30, 6), (40, 299), (50, 300),
+            (3600, 6), (3601, 6), (-10, 2),
+        ]
+        with self.repo.connect() as con:
+            for age, duration in events:
+                stop = now - datetime.timedelta(seconds=age)
+                start = stop - datetime.timedelta(seconds=duration)
+                con.execute(
+                    "INSERT INTO transitions(zone_key, start_ts, stop_ts) VALUES (?, ?, ?)",
+                    ("zone-a", start.isoformat() + "Z", stop.isoformat() + "Z"),
+                )
+            con.execute(
+                "INSERT INTO transitions(zone_key, start_ts) VALUES (?, ?)",
+                ("zone-a", (now - datetime.timedelta(seconds=3)).isoformat() + "Z"),
+            )
+        with patch("reborn.db.utcnow_iso", return_value=now.isoformat() + "Z"):
+            result = self.repo.cycle_indicator_counts(5, 300, 1440, 60)
+        self.assertEqual(result["zones"], [{"zone_key": "zone-a", "brief_pulses": 2, "short_calls": 3}])
+
+    def test_cycle_indicator_counts_are_not_timeline_compressed(self):
+        now = datetime.datetime(2026, 1, 2, 12, 0)
+        with self.repo.connect() as con:
+            con.executemany(
+                "INSERT INTO transitions(zone_key, start_ts, stop_ts) VALUES (?, ?, ?)",
+                [("zone-a", "2026-01-02T11:59:50Z", "2026-01-02T11:59:52Z")] * 2001,
+            )
+        with patch("reborn.db.utcnow_iso", return_value=now.isoformat() + "Z"):
+            result = self.repo.cycle_indicator_counts(5, 300, 1440, 60)
+        self.assertEqual(result["zones"][0]["brief_pulses"], 2001)
+
+    def test_cycle_indicator_counts_are_separate_for_each_zone(self):
+        self.repo.update_mapping("PORTA", 1, "zone-b", "Kitchen")
+        with self.repo.connect() as con:
+            con.executemany(
+                "INSERT INTO transitions(zone_key, start_ts, stop_ts) VALUES (?, ?, ?)",
+                [
+                    ("zone-a", "2026-01-02T11:59:50Z", "2026-01-02T11:59:52Z"),
+                    ("zone-b", "2026-01-02T11:59:00Z", "2026-01-02T11:59:30Z"),
+                ],
+            )
+        with patch("reborn.db.utcnow_iso", return_value="2026-01-02T12:00:00Z"):
+            result = self.repo.cycle_indicator_counts(5, 300, 1440, 60)
+        self.assertEqual(result["zones"], [
+            {"zone_key": "zone-a", "brief_pulses": 1, "short_calls": 0},
+            {"zone_key": "zone-b", "brief_pulses": 0, "short_calls": 1},
+        ])
+
+    def test_cycle_indicator_api_validates_settings(self):
+        import reborn.app as api
+
+        with patch.object(api, "repo", self.repo):
+            client = api.app.test_client()
+            self.assertEqual(client.get("/api/charts/cycle-indicators?pulse_max_seconds=0").status_code, 400)
+            self.assertEqual(client.get("/api/charts/cycle-indicators?short_window_minutes=1.5").status_code, 400)
+            self.assertEqual(client.get("/api/charts/cycle-indicators?pulse_max_seconds=60&short_max_minutes=1").status_code, 400)
+            response = client.get("/api/charts/cycle-indicators?pulse_max_seconds=10&short_max_minutes=2")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["zones"], [])
+            with patch.object(self.repo, "cycle_indicator_counts", return_value={"as_of": "2026-01-01T00:00:00Z", "zones": []}) as counts:
+                client.get("/api/charts/cycle-indicators?pulse_max_seconds=10&short_max_minutes=2&pulse_window_hours=12&short_window_minutes=30")
+                counts.assert_called_once_with(10, 120, 720, 30)
+
 
 if __name__ == "__main__":
     unittest.main()

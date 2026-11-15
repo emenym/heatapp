@@ -62,7 +62,3 @@ export function isFresh(timestampMs: number | null, intervalMs: number, nowMs: n
   const age = nowMs - timestampMs;
   return age >= -15000 && age <= Math.max(intervalMs * 3, 15000);
 }
-
-export function canAssessAnomalies(dataFresh: boolean, timelineAvailable: boolean, hasEnabledZones: boolean): boolean {
-  return dataFresh && timelineAvailable && hasEnabledZones;
-}

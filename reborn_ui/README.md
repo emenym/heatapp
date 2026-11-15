@@ -16,8 +16,18 @@ travels with each sample. Simulated input is labeled and is not treated as fresh
 hardware data. Mapping changes invalidate the sample until another is received.
 Existing databases have no sample timestamp until the first successful sample.
 
-Anomaly Watch applies fixed rules; it is not a diagnosis. It cannot assess
-without fresh hardware and complete, recent timeline data. Historical data
+Anomaly Watch applies rules; it is not a diagnosis. Brief pulses and short
+completed calls have separate indicators, based on uncompressed transitions
+ending within rolling windows. By default, it flags 25 or more calls of at
+most 5 seconds in 24 hours, or 5 or more calls longer than 5 seconds but
+shorter than 5 minutes in 60 minutes. The cycle settings can be changed in the
+panel and are stored per browser, not shared between devices. The raw
+transitions are not filtered or changed; completed-call counts below the
+warning thresholds are available in the panel. Durations are sampled estimates:
+brief pulses may reflect input chatter or thermostat power behavior, but do
+not prove charging, a heat call, or boiler operation. Other anomaly rules remain
+unchanged. Cycle indicators require fresh hardware and recent count data.
+Historical data
 records transitions rather than continuous coverage, so recording gaps cannot
 be identified and an open interval may include time when the poller was down.
 Daily timeline views use the browser's current time-zone offset, which may not
