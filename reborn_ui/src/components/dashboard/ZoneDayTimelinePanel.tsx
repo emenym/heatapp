@@ -138,6 +138,9 @@ function asLocalTimeLabel(seconds: number): string {
 }
 
 function asDuration(seconds: number): string {
+  if (seconds > 0 && seconds < 60 && !Number.isInteger(seconds)) {
+    return `${Number(seconds.toFixed(3))}s`;
+  }
   const safe = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(safe / 3600);
   const minutes = Math.floor((safe % 3600) / 60);

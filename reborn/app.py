@@ -8,8 +8,7 @@ import graphene
 from simple_websocket import ConnectionClosed
 
 from reborn.config import DB_PATH, PORT, ZONE_SEED_PATH, POLL_INTERVAL_SECONDS
-from reborn.db import MappingChangedError, RebornRepository
-from reborn.poller import sample_source, sample_zone_states
+from reborn.db import RebornRepository
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -180,12 +179,19 @@ def options_zones():
 
 @app.route("/api/poll", methods=["POST"])
 def poll_once():
-    sampled, sampled_mapping = sample_zone_states(repo)
-    try:
-        repo.apply_sample(sampled, sample_source(), POLL_INTERVAL_SECONDS, sampled_mapping)
-    except MappingChangedError as exc:
-        return jsonify({"error": str(exc)}), 409
-    return jsonify({"updated": True, "sampled": sampled})
+    requested_at = datetime.datetime.utcnow()
+    initial = repo.monitoring_status()
+    initial_sample = initial["last_sample_at"] if initial else None
+    deadline = time.monotonic() + min(30, max(5, 2 * POLL_INTERVAL_SECONDS + 1))
+    while time.monotonic() < deadline:
+        status = repo.monitoring_status()
+        if status and status["last_sample_at"] != initial_sample:
+            observed = datetime.datetime.fromisoformat(status["last_sample_at"].replace("Z", ""))
+            if observed >= requested_at:
+                sampled = {row["zone_key"]: row["state"] for row in repo.list_zone_states() if row["enabled"]}
+                return jsonify({"updated": True, "sampled": sampled})
+        time.sleep(0.05)
+    return jsonify({"error": "Poller did not provide a new hardware sample."}), 503
 
 
 @app.route("/api/poll", methods=["OPTIONS"])

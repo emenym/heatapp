@@ -1,5 +1,6 @@
 import datetime
 import json
+import math
 import os
 import re
 import sqlite3
@@ -9,7 +10,7 @@ ZONE_NAME_RE = re.compile(r"^[A-Za-z0-9 _'()-]{1,64}$")
 
 
 def utcnow_iso():
-    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return datetime.datetime.utcnow().isoformat(timespec="microseconds") + "Z"
 
 
 class MappingChangedError(ValueError):
@@ -77,6 +78,7 @@ class RebornRepository:
                     zone_key TEXT NOT NULL,
                     start_ts TEXT NOT NULL,
                     stop_ts TEXT,
+                    duration_ns INTEGER,
                     FOREIGN KEY(zone_key) REFERENCES zones(zone_key)
                 );
 
@@ -90,6 +92,10 @@ class RebornRepository:
                 ON transitions(stop_ts);
                 """
             )
+            con.execute("BEGIN IMMEDIATE")
+            columns = {row["name"] for row in con.execute("PRAGMA table_info(transitions)")}
+            if "duration_ns" not in columns:
+                con.execute("ALTER TABLE transitions ADD COLUMN duration_ns INTEGER")
 
     def _compress_timeline_segments(self, segments, max_segments):
         if len(segments) <= max_segments:
@@ -103,14 +109,14 @@ class RebornRepository:
             for segment in segments:
                 zone_key = segment["zone_key"]
                 zone_name = segment["zone_name"]
-                start = int(segment["start_seconds"])
-                end = int(segment["end_seconds"])
+                start = segment["start_seconds"]
+                end = segment["end_seconds"]
                 if end <= start:
                     continue
 
                 zone_data = per_zone_bins.setdefault(zone_key, {"zone_name": zone_name, "bins": set()})
-                first_bin = start // bin_seconds
-                last_bin = max(first_bin, (end - 1) // bin_seconds)
+                first_bin = math.floor(start / bin_seconds)
+                last_bin = max(first_bin, math.ceil(end / bin_seconds) - 1)
                 for bin_idx in range(first_bin, last_bin + 1):
                     zone_data["bins"].add(bin_idx)
 
@@ -328,18 +334,25 @@ class RebornRepository:
             )
             con.execute("DELETE FROM monitoring_status WHERE id = 1")
 
-    def apply_sample(self, sampled_states, sample_source="hardware", expected_interval_seconds=2, sampled_mapping=None):
-        now = utcnow_iso()
+    def apply_sample(self, sampled_states, sample_source="hardware", expected_interval_seconds=2, sampled_mapping=None,
+                     observed_at=None, durations_ns=None):
+        now = observed_at or utcnow_iso()
+        durations_ns = durations_ns or {}
+        started = set()
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
-            enabled_mapping = {
-                (row["port"], row["bit"], row["zone_key"]) for row in con.execute(
-                    "SELECT port, bit, zone_key FROM hardware_map WHERE enabled = 1"
-                )
-            }
+            mapping_rows = con.execute(
+                "SELECT port, bit, zone_key, updated_at FROM hardware_map WHERE enabled = 1"
+            ).fetchall()
+            enabled_mapping = {(row["port"], row["bit"], row["zone_key"]) for row in mapping_rows}
             if (set(sampled_states) != {item[2] for item in enabled_mapping}
                     or (sampled_mapping is not None and set(sampled_mapping) != enabled_mapping)):
                 raise MappingChangedError("Hardware mapping changed during sampling; sample rejected")
+            if observed_at is not None:
+                observed = datetime.datetime.fromisoformat(observed_at.replace("Z", ""))
+                if any(datetime.datetime.fromisoformat(row["updated_at"].replace("Z", "")) > observed
+                       for row in mapping_rows):
+                    raise MappingChangedError("Hardware mapping changed after sampling; sample rejected")
             current = con.execute(
                 "SELECT zone_key, state FROM zone_state"
             ).fetchall()
@@ -367,11 +380,14 @@ class RebornRepository:
                         "INSERT INTO transitions(zone_key, start_ts) VALUES (?, ?)",
                         (zone_key, now),
                     )
+                    started.add(zone_key)
                 else:
+                    duration = durations_ns.get(zone_key)
                     con.execute(
                         """
                         UPDATE transitions
-                        SET stop_ts = ?
+                        SET stop_ts = ?,
+                            duration_ns = CASE WHEN start_ts = ? THEN ? ELSE NULL END
                         WHERE id = (
                             SELECT id FROM transitions
                             WHERE zone_key = ? AND stop_ts IS NULL
@@ -379,7 +395,7 @@ class RebornRepository:
                             LIMIT 1
                         )
                         """,
-                        (now, zone_key),
+                        (now, duration[0] if duration else None, duration[1] if duration else None, zone_key),
                     )
 
             con.execute(
@@ -393,6 +409,7 @@ class RebornRepository:
                 """,
                 (now, sample_source, expected_interval_seconds),
             )
+        return started
 
     def monitoring_status(self):
         with self.connect() as con:
@@ -403,29 +420,32 @@ class RebornRepository:
 
     def cycle_indicator_counts(self, pulse_max_seconds, short_max_seconds, pulse_window_minutes, short_window_minutes):
         now = datetime.datetime.fromisoformat(utcnow_iso().replace("Z", ""))
-        now_iso = now.isoformat() + "Z"
-        pulse_start = (now - datetime.timedelta(minutes=pulse_window_minutes)).isoformat() + "Z"
-        short_start = (now - datetime.timedelta(minutes=short_window_minutes)).isoformat() + "Z"
+        now_iso = now.isoformat(timespec="microseconds") + "Z"
+        pulse_start = (now - datetime.timedelta(minutes=pulse_window_minutes)).isoformat(timespec="microseconds") + "Z"
+        short_start = (now - datetime.timedelta(minutes=short_window_minutes)).isoformat(timespec="microseconds") + "Z"
+        earliest = min(now - datetime.timedelta(minutes=pulse_window_minutes),
+                       now - datetime.timedelta(minutes=short_window_minutes))
+        coarse_start = earliest.replace(microsecond=0).isoformat() + ".000000Z"
+        coarse_end = (now.replace(microsecond=0) + datetime.timedelta(seconds=1)).isoformat() + ".000000Z"
         with self.connect() as con:
             rows = con.execute(
                 """
                 WITH completed AS (
                     SELECT zone_key, stop_ts,
-                           CAST(strftime('%s', stop_ts) AS INTEGER) -
-                           CAST(strftime('%s', start_ts) AS INTEGER) AS duration_seconds
+                           COALESCE(duration_ns, ROUND((julianday(stop_ts) - julianday(start_ts)) * 86400000) * 1000000) AS duration_ns
                     FROM transitions
-                    WHERE stop_ts IS NOT NULL AND stop_ts >= ? AND stop_ts <= ?
+                    WHERE stop_ts >= ? AND stop_ts < ? AND julianday(stop_ts) <= julianday(?)
                 )
                 SELECT zone_key,
-                       SUM(CASE WHEN stop_ts >= ? AND duration_seconds BETWEEN 0 AND ?
+                       SUM(CASE WHEN julianday(stop_ts) >= julianday(?) AND duration_ns BETWEEN 0 AND ?
                                 THEN 1 ELSE 0 END) AS brief_pulses,
-                       SUM(CASE WHEN stop_ts >= ? AND duration_seconds > ? AND duration_seconds < ?
+                       SUM(CASE WHEN julianday(stop_ts) >= julianday(?) AND duration_ns > ? AND duration_ns < ?
                                 THEN 1 ELSE 0 END) AS short_calls
                 FROM completed
                 GROUP BY zone_key
                 """,
-                (min(pulse_start, short_start), now_iso, pulse_start, pulse_max_seconds,
-                 short_start, pulse_max_seconds, short_max_seconds),
+                (coarse_start, coarse_end, now_iso, pulse_start, pulse_max_seconds * 1_000_000_000,
+                 short_start, pulse_max_seconds * 1_000_000_000, short_max_seconds * 1_000_000_000),
             ).fetchall()
         return {"as_of": now_iso, "zones": [dict(row) for row in rows]}
 
@@ -464,21 +484,22 @@ class RebornRepository:
         return {"first": row["first_ts"], "last": row["last_ts"]}
 
     def day_runtime_seconds(self):
-        now = datetime.datetime.utcnow().replace(microsecond=0)
-        now_iso = now.isoformat() + "Z"
-        day_ago_iso = (now - datetime.timedelta(hours=24)).isoformat() + "Z"
+        now = datetime.datetime.utcnow()
+        now_iso = now.isoformat(timespec="microseconds") + "Z"
+        day_ago_iso = (now - datetime.timedelta(hours=24)).isoformat(timespec="microseconds") + "Z"
+        coarse_end = (now.replace(microsecond=0) + datetime.timedelta(seconds=1)).isoformat() + ".000000Z"
 
         with self.connect() as con:
             rows = con.execute(
                 """
                 SELECT zone_key,
-                       CAST(SUM((julianday(MIN(COALESCE(stop_ts, ?), ?)) - julianday(MAX(start_ts, ?))) * 86400) AS INTEGER) AS seconds
+                       CAST(SUM((MIN(julianday(COALESCE(stop_ts, ?)), julianday(?)) - MAX(julianday(start_ts), julianday(?))) * 86400) AS INTEGER) AS seconds
                 FROM transitions
-                WHERE start_ts < ?
-                  AND COALESCE(stop_ts, ?) > ?
+                WHERE start_ts < ? AND julianday(start_ts) < julianday(?)
+                  AND julianday(COALESCE(stop_ts, ?)) > julianday(?)
                 GROUP BY zone_key
                 """,
-                (now_iso, now_iso, day_ago_iso, now_iso, now_iso, day_ago_iso),
+                (now_iso, now_iso, day_ago_iso, coarse_end, now_iso, now_iso, day_ago_iso),
             ).fetchall()
 
         return {row["zone_key"]: max(0, int(row["seconds"] or 0)) for row in rows}
@@ -510,9 +531,9 @@ class RebornRepository:
                 ORDER BY z.zone_name, t.start_ts
                 """,
                 (
-                    effective_end_utc.replace(microsecond=0).isoformat() + "Z",
-                    now_utc.replace(microsecond=0).isoformat() + "Z",
-                    day_start_utc.replace(microsecond=0).isoformat() + "Z",
+                    (effective_end_utc.replace(microsecond=0) + datetime.timedelta(seconds=1)).isoformat() + ".000000Z",
+                    now_utc.isoformat(timespec="microseconds") + "Z",
+                    day_start_utc.isoformat(timespec="microseconds") + "Z",
                 ),
             ).fetchall()
             active_rows = []
@@ -536,8 +557,8 @@ class RebornRepository:
             if seg_stop <= seg_start:
                 continue
 
-            start_seconds = int((seg_start - day_start_utc).total_seconds())
-            end_seconds = int((seg_stop - day_start_utc).total_seconds())
+            start_seconds = (seg_start - day_start_utc).total_seconds()
+            end_seconds = (seg_stop - day_start_utc).total_seconds()
 
             out.append(
                 {
@@ -560,8 +581,8 @@ class RebornRepository:
             if seg_stop <= seg_start:
                 continue
 
-            start_seconds = int((seg_start - day_start_utc).total_seconds())
-            end_seconds = int((seg_stop - day_start_utc).total_seconds())
+            start_seconds = (seg_start - day_start_utc).total_seconds()
+            end_seconds = (seg_stop - day_start_utc).total_seconds()
             out.append(
                 {
                     "zone_key": row["zone_key"],
@@ -624,9 +645,9 @@ class RebornRepository:
                 """
                 ,
                 (
-                    range_end_utc.replace(microsecond=0).isoformat() + "Z",
-                    now_utc.replace(microsecond=0).isoformat() + "Z",
-                    range_start_utc.replace(microsecond=0).isoformat() + "Z",
+                    range_end_utc.isoformat(timespec="microseconds") + "Z",
+                    now_utc.isoformat(timespec="microseconds") + "Z",
+                    range_start_utc.isoformat(timespec="microseconds") + "Z",
                 )
             ).fetchall()
 
@@ -656,7 +677,7 @@ class RebornRepository:
                 seg_stop = min(stop_dt, day_end_utc)
                 if seg_stop <= seg_start:
                     continue
-                seconds_by_zone[zone_key][i] += int((seg_stop - seg_start).total_seconds())
+                seconds_by_zone[zone_key][i] += (seg_stop - seg_start).total_seconds()
 
         zones = []
         for row in zone_rows:
@@ -667,7 +688,7 @@ class RebornRepository:
                     "zone_name": row["zone_name"],
                     "port": row["port"],
                     "bit": row["bit"],
-                    "seconds_by_day": seconds_by_zone.get(zone_key, [0 for _ in dates]),
+                    "seconds_by_day": [int(seconds) for seconds in seconds_by_zone.get(zone_key, [0 for _ in dates])],
                 }
             )
 
@@ -692,7 +713,8 @@ class RebornRepository:
                 WHERE t.start_ts >= ? OR (t.stop_ts IS NOT NULL AND t.stop_ts >= ?)
                 ORDER BY t.start_ts ASC
                 """,
-                (since_utc.replace(microsecond=0).isoformat() + "Z", since_utc.replace(microsecond=0).isoformat() + "Z"),
+                (since_utc.replace(microsecond=0).isoformat() + ".000000Z",
+                 since_utc.replace(microsecond=0).isoformat() + ".000000Z"),
             ).fetchall()
 
         events = []
@@ -706,7 +728,7 @@ class RebornRepository:
                         "zone_name": row["zone_name"],
                         "state": "1",
                         "ts": row["start_ts"],
-                        "ts_local": local_dt.replace(microsecond=0).isoformat(),
+                        "ts_local": local_dt.isoformat(timespec="microseconds"),
                     }
                 )
 
@@ -720,11 +742,11 @@ class RebornRepository:
                             "zone_name": row["zone_name"],
                             "state": "0",
                             "ts": row["stop_ts"],
-                            "ts_local": local_dt.replace(microsecond=0).isoformat(),
+                            "ts_local": local_dt.isoformat(timespec="microseconds"),
                         }
                     )
 
-        events.sort(key=lambda item: item["ts"])
+        events.sort(key=lambda item: datetime.datetime.fromisoformat(item["ts"].replace("Z", "")))
         if len(events) > max_events:
             events = events[-max_events:]
         return {
