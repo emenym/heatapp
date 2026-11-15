@@ -35,3 +35,34 @@ export function clamp01(value: number): number {
   }
   return Math.max(0, Math.min(1, value));
 }
+
+export function peakConcurrentZones(
+  segments: Array<{ zone_key: string; start_seconds: number; end_seconds: number }>,
+  start: number,
+  end: number,
+): number {
+  const events = segments.flatMap((segment) => {
+    const from = Math.max(start, segment.start_seconds);
+    const to = Math.min(end, segment.end_seconds);
+    return from < to ? [{ at: from, key: segment.zone_key, delta: 1 }, { at: to, key: segment.zone_key, delta: -1 }] : [];
+  }).sort((a, b) => a.at - b.at || a.delta - b.delta);
+  const active = new Map<string, number>();
+  let peak = 0;
+  for (const event of events) {
+    const count = (active.get(event.key) ?? 0) + event.delta;
+    if (count === 0) active.delete(event.key);
+    else active.set(event.key, count);
+    peak = Math.max(peak, active.size);
+  }
+  return peak;
+}
+
+export function isFresh(timestampMs: number | null, intervalMs: number, nowMs: number): boolean {
+  if (timestampMs === null || !Number.isFinite(timestampMs) || !Number.isFinite(intervalMs) || intervalMs <= 0) return false;
+  const age = nowMs - timestampMs;
+  return age >= -15000 && age <= Math.max(intervalMs * 3, 15000);
+}
+
+export function canAssessAnomalies(dataFresh: boolean, timelineAvailable: boolean, hasEnabledZones: boolean): boolean {
+  return dataFresh && timelineAvailable && hasEnabledZones;
+}

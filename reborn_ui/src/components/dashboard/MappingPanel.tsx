@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { SyntheticEvent } from "react";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
+import { InfoTooltip } from "@/components/dashboard/InfoTooltip";
 import {
   Select,
   SelectContent,
@@ -42,7 +43,10 @@ export function MappingPanel() {
   return (
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
-        <CardTitle>Hardware Map</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle>Hardware Map</CardTitle>
+          <InfoTooltip label="About the hardware map">Assigns hardware port and bit inputs to zones and enables or disables monitoring for each mapping.</InfoTooltip>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <form className="grid gap-3" onSubmit={(e) => void confirmAndSubmit(e)}>

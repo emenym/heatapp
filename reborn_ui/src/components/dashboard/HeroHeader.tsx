@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
+import { InfoTooltip } from "@/components/dashboard/InfoTooltip";
 
 function streamBadgeClasses(state: "connecting" | "open" | "reconnecting" | "error"): string {
   if (state === "open") {
@@ -35,6 +36,9 @@ export function HeroHeader() {
     setPollIntervalMs,
     streamState,
     lastStreamMessageAt,
+    streamFresh,
+    sampleFresh,
+    monitoring,
   } = useDashboardContext();
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
@@ -68,18 +72,26 @@ export function HeroHeader() {
     <header className="panel-glass flex items-end justify-between gap-4 p-4 max-[980px]:flex-col max-[980px]:items-start">
       <div className="space-y-1">
         <p className="text-accent m-0 text-[0.72rem] uppercase tracking-[0.12em]">heatapp reborn</p>
-        <h1 className="m-0 text-3xl font-semibold tracking-tight max-[980px]:text-[1.35rem]">Zone Control Matrix</h1>
-        <p className="m-0 text-sm text-slate-300">Stable identity by zone_key, mutable display labels, and live channel mapping.</p>
+        <div className="flex items-center gap-2">
+          <h1 className="m-0 text-3xl font-semibold tracking-tight max-[980px]:text-[1.35rem]">Heating Monitor</h1>
+          <InfoTooltip label="About the heating monitor">
+            Shows connection and hardware sample freshness, zone counts, and controls for refreshing the dashboard and polling the hardware.
+          </InfoTooltip>
+        </div>
+        <p className="m-0 text-sm text-slate-300">Zone calls and runtime, not measured room temperature or heat delivery.</p>
         <div className="flex items-center gap-2 pt-1">
           <span
-            className={`rounded-full border px-2 py-0.5 text-[0.68rem] font-medium tracking-wide ${streamBadgeClasses(streamState)}`}
+            className={`rounded-full border px-2 py-0.5 text-[0.68rem] font-medium tracking-wide ${streamBadgeClasses(streamState === "open" && !streamFresh ? "reconnecting" : streamState)}`}
           >
-            {streamLabel(streamState)}
+            {streamState === "open" && !streamFresh ? "Waiting / Stale" : streamLabel(streamState)}
           </span>
           <span className="text-xs text-slate-300">
             {lastUpdateSeconds === null ? "Waiting for first stream frame..." : `Last update ${lastUpdateSeconds}s ago`}
           </span>
         </div>
+        <p className="text-xs text-slate-300">
+          {!monitoring ? "Hardware sample: unavailable" : `Last sample: ${new Date(monitoring.last_sample_at).toLocaleString()} — ${monitoring.sample_source === "mock" ? "simulated data" : sampleFresh ? "fresh" : "stale"}`}
+        </p>
       </div>
 
       <div className="flex w-full items-center justify-end gap-4 max-[980px]:justify-between">
@@ -102,7 +114,7 @@ export function HeroHeader() {
         </div>
         <div className="grid text-right max-[980px]:text-left">
           <span className="text-xs text-slate-300">Active</span>
-          <strong className="text-2xl">{onlineCount}</strong>
+          <strong className="text-2xl">{streamFresh && sampleFresh && monitoring?.sample_source === "hardware" ? onlineCount : "—"}</strong>
         </div>
         <Button variant="outline" onClick={() => void doPoll()}>
           Poll Now

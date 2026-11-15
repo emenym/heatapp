@@ -12,6 +12,10 @@ def utcnow_iso():
     return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
+class MappingChangedError(ValueError):
+    pass
+
+
 class RebornRepository:
     def __init__(self, db_path):
         self.db_path = db_path
@@ -59,6 +63,13 @@ class RebornRepository:
                     state TEXT NOT NULL CHECK(state IN ('0', '1')),
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY(zone_key) REFERENCES zones(zone_key)
+                );
+
+                CREATE TABLE IF NOT EXISTS monitoring_status (
+                    id INTEGER PRIMARY KEY CHECK(id = 1),
+                    last_sample_at TEXT NOT NULL,
+                    sample_source TEXT NOT NULL,
+                    expected_interval_seconds REAL NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS transitions (
@@ -315,10 +326,20 @@ class RebornRepository:
                 """,
                 (port, bit, zone_key, 1 if enabled else 0, now, now),
             )
+            con.execute("DELETE FROM monitoring_status WHERE id = 1")
 
-    def apply_sample(self, sampled_states):
+    def apply_sample(self, sampled_states, sample_source="hardware", expected_interval_seconds=2, sampled_mapping=None):
         now = utcnow_iso()
         with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            enabled_mapping = {
+                (row["port"], row["bit"], row["zone_key"]) for row in con.execute(
+                    "SELECT port, bit, zone_key FROM hardware_map WHERE enabled = 1"
+                )
+            }
+            if (set(sampled_states) != {item[2] for item in enabled_mapping}
+                    or (sampled_mapping is not None and set(sampled_mapping) != enabled_mapping)):
+                raise MappingChangedError("Hardware mapping changed during sampling; sample rejected")
             current = con.execute(
                 "SELECT zone_key, state FROM zone_state"
             ).fetchall()
@@ -360,6 +381,25 @@ class RebornRepository:
                         """,
                         (now, zone_key),
                     )
+
+            con.execute(
+                """
+                INSERT INTO monitoring_status(id, last_sample_at, sample_source, expected_interval_seconds)
+                VALUES (1, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    last_sample_at = excluded.last_sample_at,
+                    sample_source = excluded.sample_source,
+                    expected_interval_seconds = excluded.expected_interval_seconds
+                """,
+                (now, sample_source, expected_interval_seconds),
+            )
+
+    def monitoring_status(self):
+        with self.connect() as con:
+            row = con.execute(
+                "SELECT last_sample_at, sample_source, expected_interval_seconds FROM monitoring_status WHERE id = 1"
+            ).fetchone()
+        return dict(row) if row else None
 
     def current_uptime_seconds(self, zone_key):
         with self.connect() as con:
@@ -506,6 +546,7 @@ class RebornRepository:
 
         out.sort(key=lambda item: (item["zone_name"], item["start_seconds"]))
         max_segments = max(100, int(max_segments))
+        compressed = len(out) > max_segments
         out = self._compress_timeline_segments(out, max_segments)
 
         if is_today:
@@ -519,6 +560,7 @@ class RebornRepository:
             "is_today": is_today,
             "now_seconds": max(0, min(86399, now_seconds)),
             "max_segments": max_segments,
+            "compressed": compressed,
             "segments": out,
         }
 

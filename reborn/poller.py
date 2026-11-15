@@ -2,6 +2,7 @@ import time
 import os
 import datetime
 import sys
+import logging
 
 try:
     import lib16inpind
@@ -9,6 +10,7 @@ except ImportError:  # pragma: no cover - hardware dependency may be missing in 
     lib16inpind = None
 
 from reborn.config import POLL_INTERVAL_SECONDS, POLL_STACK
+from reborn.db import MappingChangedError
 
 
 _LAST_STATUS_LEN = 0
@@ -43,12 +45,18 @@ def sample_zone_states(repo):
     all_state = _read_all_state()
     mapping = repo.list_mapping()
     sampled = {}
+    sampled_mapping = set()
     for row in mapping:
         if not row.get("enabled"):
             continue
         idx = _flat_index(row["port"], int(row["bit"]))
         sampled[row["zone_key"]] = _bit_from_all_state(all_state, idx)
-    return sampled
+        sampled_mapping.add((row["port"], int(row["bit"]), row["zone_key"]))
+    return sampled, sampled_mapping
+
+
+def sample_source():
+    return "mock" if lib16inpind is None else "hardware"
 
 
 def _zone_sort_key(zone_key):
@@ -115,8 +123,13 @@ def _render_zone_status(sampled, name_map):
 def run_poll_loop(repo):
     try:
         while True:
-            sampled = sample_zone_states(repo)
-            repo.apply_sample(sampled)
+            sampled, sampled_mapping = sample_zone_states(repo)
+            try:
+                repo.apply_sample(sampled, sample_source(), POLL_INTERVAL_SECONDS, sampled_mapping)
+            except MappingChangedError:
+                logging.warning("Hardware mapping changed during sampling; retrying")
+                time.sleep(POLL_INTERVAL_SECONDS)
+                continue
             name_map = _zone_name_map(repo)
             _render_zone_status(sampled, name_map)
             time.sleep(POLL_INTERVAL_SECONDS)

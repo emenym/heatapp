@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { isFresh } from "@/components/dashboard/chartUtils";
 import {
   ApiErrorResponse,
   DataRange,
   MappingItem,
   MapFormState,
+  MonitoringStatus,
   Port,
   Zone,
 } from "@/components/dashboard/types";
@@ -28,6 +30,18 @@ export function useDashboardData() {
   const [dataRange, setDataRange] = useState<DataRange | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [streamError, setStreamError] = useState<string>("");
+  const [monitoring, setMonitoring] = useState<MonitoringStatus | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const streamFresh = streamState === "open" && isFresh(lastStreamMessageAt, pollIntervalMs, nowMs);
+  const sampleTime = monitoring ? Date.parse(monitoring.last_sample_at) : NaN;
+  const sampleFresh = isFresh(sampleTime, (monitoring?.expected_interval_seconds ?? 0) * 1000, nowMs);
+  const dataFresh = streamFresh && sampleFresh && monitoring?.sample_source === "hardware";
 
   const refreshSnapshot = async (): Promise<void> => {
     const [zonesRes, mapRes] = await Promise.all([fetch("/api/zones"), fetch("/api/mapping")]);
@@ -38,11 +52,12 @@ export function useDashboardData() {
       throw new Error("Failed to load mapping");
     }
 
-    const zonesData = (await zonesRes.json()) as { zones?: Zone[]; data_range?: DataRange };
+    const zonesData = (await zonesRes.json()) as { zones?: Zone[]; data_range?: DataRange; monitoring?: MonitoringStatus | null };
     const mapData = (await mapRes.json()) as { mapping?: MappingItem[] };
 
     setZones((zonesData.zones || []).slice().sort(sortByPortBit));
     setDataRange(zonesData.data_range ?? null);
+    setMonitoring(zonesData.monitoring ?? null);
     setMapping((mapData.mapping || []).slice().sort(sortByPortBit));
   };
 
@@ -85,16 +100,23 @@ export function useDashboardData() {
             zones?: Zone[];
             mapping?: MappingItem[];
             data_range?: DataRange;
+            monitoring?: MonitoringStatus | null;
           };
+          if (!Array.isArray(payload.zones) || !Array.isArray(payload.mapping)) {
+            throw new Error("Missing dashboard data");
+          }
           setZones((payload.zones || []).slice().sort(sortByPortBit));
           setDataRange(payload.data_range ?? null);
+          setMonitoring(payload.monitoring ?? null);
           setMapping((payload.mapping || []).slice().sort(sortByPortBit));
           setLastStreamMessageAt(Date.now());
           setLoading(false);
           setStreamError("");
+          setStreamState("open");
         } catch {
           setStreamError("Received invalid stream payload");
           setStreamState("error");
+          setLoading(false);
         }
       };
 
@@ -102,6 +124,7 @@ export function useDashboardData() {
         if (!cancelled) {
           setStreamState("error");
           setStreamError("Dashboard stream connection failed");
+          setLoading(false);
         }
       };
 
@@ -110,6 +133,7 @@ export function useDashboardData() {
           return;
         }
         setStreamState("reconnecting");
+        setLoading(false);
         reconnectTimer = window.setTimeout(connect, 2000);
       };
     };
@@ -136,13 +160,14 @@ export function useDashboardData() {
   });
 
   const zoneCount = zones.length;
-  const onlineCount = useMemo(() => zones.filter((z) => z.state === "1").length, [zones]);
+  const onlineCount = useMemo(() => zones.filter((z) => z.enabled && z.state === "1").length, [zones]);
 
   const pollMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/poll", { method: "POST" });
       if (!res.ok) {
-        throw new Error("Poll request failed");
+        const body: ApiErrorResponse = await res.json().catch(() => ({} as ApiErrorResponse));
+        throw new Error(body.error || "Poll request failed");
       }
     },
     onSuccess: refreshSnapshot,
@@ -240,6 +265,10 @@ export function useDashboardData() {
     zoneCount,
     onlineCount,
     dataRange,
+    monitoring,
+    streamFresh,
+    sampleFresh,
+    dataFresh,
     setRenameDraft,
     setMapForm,
     pollIntervalMs,

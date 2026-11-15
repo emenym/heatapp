@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
+import { InfoTooltip } from "@/components/dashboard/InfoTooltip";
 import {
   Bar,
   BarChart,
@@ -44,7 +45,7 @@ type ChartPanelProps = {
 };
 
 function ChartPanel({ title, metric }: ChartPanelProps) {
-  const { zones } = useDashboardContext();
+  const { zones, dataFresh, loading } = useDashboardContext();
 
   const rows = zones.map((zone, index) => ({
     zone: zone.zone_name || zone.zone_key,
@@ -55,9 +56,14 @@ function ChartPanel({ title, metric }: ChartPanelProps) {
   return (
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
-        <CardTitle>{title}</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle>{title}</CardTitle>
+          <InfoTooltip label="About zone runtime">Compares how long each zone called for heat over the last 24 hours. Runtime does not measure heat delivered.</InfoTooltip>
+        </div>
       </CardHeader>
       <CardContent>
+        {!dataFresh ? <p className="text-sm text-amber-200">Last reported values; current hardware data is unavailable.</p> : null}
+        {!loading && rows.length === 0 ? <p className="text-sm text-slate-300">No zone runtime available.</p> : null}
         <div className="h-[280px] w-full">
           <ResponsiveContainer width="100%" height="100%" className="focus:outline-none">
             <BarChart
@@ -117,28 +123,10 @@ function ChartPanel({ title, metric }: ChartPanelProps) {
   );
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
-}
-
 export function UptimeChartsPanel() {
-  const { dataRange } = useDashboardContext();
-  const totalTitle =
-    dataRange?.first && dataRange?.last
-      ? `Total Uptime (${formatDate(dataRange.first)} – ${formatDate(dataRange.last)})`
-      : "Total Uptime (N/A)";
-
   return (
     <section className="grid gap-4">
-      <ChartPanel title="Uptime" metric="current_uptime" />
-      <ChartPanel title="Uptime over the last 24 hours" metric="day_uptime" />
-      <ChartPanel title={totalTitle} metric="total_uptime" />
+      <ChartPanel title="Zone runtime over the last 24 hours" metric="day_uptime" />
     </section>
   );
 }

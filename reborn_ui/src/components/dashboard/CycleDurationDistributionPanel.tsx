@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
+import { InfoTooltip } from "@/components/dashboard/InfoTooltip";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getTodayLocalDateString } from "@/components/dashboard/chartUtils";
 
@@ -14,6 +15,7 @@ type DayTimelineSegment = {
 
 type DayTimelineResponse = {
   segments?: DayTimelineSegment[];
+  compressed?: boolean;
 };
 
 const BUCKETS = [0, 3, 5, 10, 20, 30, 60, 120, 240];
@@ -26,12 +28,13 @@ function bucketLabel(min: number, next?: number): string {
 }
 
 export function CycleDurationDistributionPanel() {
-  const { zones } = useDashboardContext();
+  const { zones, pollIntervalMs } = useDashboardContext();
   const [selectedDate, setSelectedDate] = useState<string>(getTodayLocalDateString());
   const [zoneKey, setZoneKey] = useState<string>("ALL");
   const tzOffsetMinutes = new Date().getTimezoneOffset();
   const timelineQuery = useQuery<DayTimelineResponse>({
     queryKey: ["day-timeline", selectedDate, tzOffsetMinutes, 2000],
+    refetchInterval: pollIntervalMs,
     queryFn: async () => {
       const res = await fetch(
         `/api/charts/day-timeline?date=${encodeURIComponent(selectedDate)}&tz_offset_minutes=${encodeURIComponent(String(tzOffsetMinutes))}&max_segments=2000`,
@@ -39,7 +42,11 @@ export function CycleDurationDistributionPanel() {
       if (!res.ok) {
         throw new Error("Unable to load day timeline");
       }
-      return res.json();
+      const data: DayTimelineResponse = await res.json();
+      if (!Array.isArray(data.segments) || typeof data.compressed !== "boolean") {
+        throw new Error("Incomplete day timeline response");
+      }
+      return data;
     },
   });
 
@@ -80,14 +87,22 @@ export function CycleDurationDistributionPanel() {
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
         <div className="flex items-end justify-between gap-3 max-[680px]:flex-col max-[680px]:items-start">
-          <CardTitle>Cycle Duration Distribution</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>Cycle Duration Distribution</CardTitle>
+            <InfoTooltip label="About cycle duration distribution">Groups recorded ON windows by duration for the selected date and zones. Windows at day boundaries or still in progress may be partial.</InfoTooltip>
+          </div>
           <div className="w-full max-w-56">
             <p className="mb-1 text-xs text-slate-300">Date (Local)</p>
-            <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+            <Input type="date" aria-label="Cycle distribution date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="text-xs text-slate-300">ON windows intersecting this date; windows at the day boundaries and ongoing windows may be partial, not complete cycles.</p>
+        {timelineQuery.isLoading ? <p className="text-sm text-slate-300">Loading ON windows...</p> : null}
+        {timelineQuery.isError ? <p className="text-sm text-amber-200">Unable to load ON windows.</p> : null}
+        {timelineQuery.data?.compressed ? <p className="text-sm text-amber-200">Too many windows to calculate a reliable distribution.</p> : null}
+        {timelineQuery.isSuccess && !timelineQuery.data.compressed && filtered.length === 0 ? <p className="text-sm text-slate-300">No ON windows recorded for this selection. Recording gaps are not detectable from transition history.</p> : null}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -108,14 +123,14 @@ export function CycleDurationDistributionPanel() {
           ))}
         </div>
 
-        <div className="h-[260px] w-full">
+        {timelineQuery.isSuccess && !timelineQuery.data.compressed && filtered.length > 0 ? <div className="h-[260px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rows} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
               <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" strokeDasharray="3 3" />
               <XAxis dataKey="bucket" tick={{ fill: "#cbd5e1", fontSize: 11 }} />
               <YAxis tick={{ fill: "#cbd5e1", fontSize: 11 }} allowDecimals={false} />
               <Tooltip
-                formatter={(v) => [v, "Cycles"]}
+                formatter={(v) => [v, "ON windows"]}
                 contentStyle={{
                   borderColor: "rgba(148, 163, 184, 0.35)",
                   borderRadius: "0.75rem",
@@ -126,7 +141,7 @@ export function CycleDurationDistributionPanel() {
               <Bar dataKey="count" fill="rgba(96, 165, 250, 0.8)" radius={[5, 5, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </div> : null}
       </CardContent>
     </Card>
   );

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { clamp01, formatSeconds } from "@/components/dashboard/chartUtils";
+import { InfoTooltip } from "@/components/dashboard/InfoTooltip";
 
 type DailyUptimeZone = {
   zone_key: string;
@@ -62,14 +63,17 @@ export function ZoneCalendarHeatmapPanel() {
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
         <div className="flex items-end justify-between gap-3 max-[640px]:flex-col max-[640px]:items-start">
-          <CardTitle>Daily Uptime Heatmap</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>Daily Uptime Heatmap</CardTitle>
+            <InfoTooltip label="About the daily uptime heatmap">Shows the share of each day a selected zone was recorded calling for heat over the last 35 days.</InfoTooltip>
+          </div>
           <div className="w-full max-w-60">
             <p className="mb-1 text-xs text-slate-300">Zone</p>
             <Select
               value={selected?.zone_key || ""}
               onValueChange={(value) => setSelectedZone(value || "")}
             >
-              <SelectTrigger className="bg-[rgba(15,23,42,0.65)]">
+              <SelectTrigger aria-label="Heatmap zone" className="bg-[rgba(15,23,42,0.65)]">
                 <SelectValue placeholder="Select zone">
                   {selected ? selected.zone_name || selected.zone_key : undefined}
                 </SelectValue>
@@ -86,8 +90,10 @@ export function ZoneCalendarHeatmapPanel() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="text-xs text-slate-300">Percentage of each 24-hour day with a recorded call. Colors: slate ≤1%, blue ≤15%, green ≤35%, yellow ≤55%, orange ≤80%, red &gt;80%. Today is partial; gaps in recording cannot be detected.</p>
         {loading ? <p className="text-sm text-slate-300">Loading history...</p> : null}
         {error ? <p className="text-sm text-amber-200">{error}</p> : null}
+        {!loading && !error && !selected ? <p className="text-sm text-slate-300">No zone history available.</p> : null}
 
         {!loading && !error && selected ? (
           <div className="grid grid-cols-5 gap-2 min-[520px]:grid-cols-7">

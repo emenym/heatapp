@@ -7,9 +7,9 @@ from flask_sock import Sock
 import graphene
 from simple_websocket import ConnectionClosed
 
-from reborn.config import DB_PATH, PORT, ZONE_SEED_PATH
-from reborn.db import RebornRepository
-from reborn.poller import sample_zone_states
+from reborn.config import DB_PATH, PORT, ZONE_SEED_PATH, POLL_INTERVAL_SECONDS
+from reborn.db import MappingChangedError, RebornRepository
+from reborn.poller import sample_source, sample_zone_states
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -53,6 +53,7 @@ def _dashboard_snapshot():
         "zones": _zone_payload(),
         "mapping": repo.list_mapping(),
         "data_range": repo.runtime_data_range(),
+        "monitoring": repo.monitoring_status(),
     }
 
 
@@ -169,7 +170,7 @@ def health():
 
 @app.route("/api/zones", methods=["GET"])
 def list_zones():
-    return jsonify({"zones": _zone_payload(), "data_range": repo.runtime_data_range()})
+    return jsonify({"zones": _zone_payload(), "data_range": repo.runtime_data_range(), "monitoring": repo.monitoring_status()})
 
 
 @app.route("/api/zones", methods=["OPTIONS"])
@@ -179,8 +180,11 @@ def options_zones():
 
 @app.route("/api/poll", methods=["POST"])
 def poll_once():
-    sampled = sample_zone_states(repo)
-    repo.apply_sample(sampled)
+    sampled, sampled_mapping = sample_zone_states(repo)
+    try:
+        repo.apply_sample(sampled, sample_source(), POLL_INTERVAL_SECONDS, sampled_mapping)
+    except MappingChangedError as exc:
+        return jsonify({"error": str(exc)}), 409
     return jsonify({"updated": True, "sampled": sampled})
 
 

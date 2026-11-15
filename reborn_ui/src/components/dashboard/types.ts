@@ -9,6 +9,14 @@ export type Zone = {
   current_uptime: number;
   day_uptime: number;
   total_uptime: number;
+  enabled: boolean;
+  active: boolean;
+};
+
+export type MonitoringStatus = {
+  last_sample_at: string;
+  sample_source: "hardware" | "mock";
+  expected_interval_seconds: number;
 };
 
 export type DataRange = {

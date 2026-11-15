@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDashboardContext } from "@/components/dashboard/DashboardContext";
+import { InfoTooltip } from "@/components/dashboard/InfoTooltip";
 import {
   CartesianGrid,
   Dot,
@@ -80,19 +81,23 @@ export function RecentEventsTimelinePanel() {
           const payload = JSON.parse(event.data) as RecentEventsResponse & { error?: string };
           if (payload.error) {
             setError(payload.error);
+            setLoading(false);
             return;
           }
+          if (!Array.isArray(payload.events)) throw new Error("Missing events");
           setRecentEventsData(payload);
           setLoading(false);
           setError("");
         } catch {
           setError("Received invalid recent events payload");
+          setLoading(false);
         }
       };
 
       socket.onerror = () => {
         if (!cancelled) {
           setError("Recent events stream connection failed");
+          setLoading(false);
         }
       };
 
@@ -100,6 +105,8 @@ export function RecentEventsTimelinePanel() {
         if (cancelled) {
           return;
         }
+        setError("Recent events stream connection lost");
+        setLoading(false);
         reconnectTimer = window.setTimeout(connect, 2000);
       };
     };
@@ -147,16 +154,20 @@ export function RecentEventsTimelinePanel() {
   return (
     <Card className="panel-glass gap-3 text-slate-100">
       <CardHeader className="pb-0">
-        <CardTitle>Recent Transition Timeline</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle>Recent Transition Timeline</CardTitle>
+          <InfoTooltip label="About recent transitions">Plots recent ON and OFF transitions by zone to help identify unexpected or frequent changes.</InfoTooltip>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="text-xs text-slate-300">Green: ON · Red: OFF. Times show recorded transitions, not heat delivery.</p>
         {loading ? <p className="text-sm text-slate-300">Loading transition events...</p> : null}
         {error ? <p className="text-sm text-amber-200">{error}</p> : null}
         {!loading && !error && points.length === 0 ? (
           <p className="text-sm text-slate-300">No transitions in the last {windowMinutes} minutes.</p>
         ) : null}
 
-        <div className="h-[280px] w-full">
+        {!loading && !error && points.length > 0 ? <div className="h-[280px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
               <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="3 3" />
@@ -165,8 +176,8 @@ export function RecentEventsTimelinePanel() {
                 dataKey="x"
                 domain={[0, windowMinutes]}
                 tick={{ fill: "#cbd5e1", fontSize: 12 }}
-                tickFormatter={(v) => `${Math.floor(v)}m`}
-                label={{ value: "Minutes Ago (old -> new)", position: "insideBottom", offset: -4, fill: "#93c5fd" }}
+                tickFormatter={(v) => `${Math.max(0, Math.round(windowMinutes - v))}m ago`}
+                label={{ value: "Older → newer", position: "insideBottom", offset: -4, fill: "#93c5fd" }}
               />
               <YAxis
                 type="number"
@@ -181,7 +192,7 @@ export function RecentEventsTimelinePanel() {
                 cursor={{ strokeDasharray: "3 3" }}
                 formatter={(_, __, item) => {
                   const payload = item.payload as EventPoint;
-                  return [payload.state === "1" ? "ON" : "OFF", payload.zone];
+                  return [`${payload.state === "1" ? "ON" : "OFF"} at ${payload.tsLocal}`, payload.zone];
                 }}
                 labelFormatter={() => "Transition"}
                 contentStyle={{
@@ -209,7 +220,7 @@ export function RecentEventsTimelinePanel() {
               />
             </ScatterChart>
           </ResponsiveContainer>
-        </div>
+        </div> : null}
       </CardContent>
     </Card>
   );
