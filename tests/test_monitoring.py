@@ -70,6 +70,47 @@ class MonitoringTests(unittest.TestCase):
             self.assertEqual(payload["monitoring"]["sample_source"], "mock")
             self.assertEqual(api._dashboard_snapshot()["monitoring"], payload["monitoring"])
 
+    def test_dashboard_exposes_latest_falling_edge_for_each_zone(self):
+        import reborn.app as api
+
+        self.repo.update_mapping("PORTA", 1, "zone-b", "Kitchen")
+        with patch.object(api, "repo", self.repo):
+            client = api.app.test_client()
+            zones = client.get("/api/zones").get_json()["zones"]
+            self.assertEqual([zone["last_off_at"] for zone in zones], [None, None])
+
+            with self.repo.connect() as con:
+                con.executemany(
+                    "INSERT INTO transitions(zone_key, start_ts, stop_ts) VALUES (?, ?, ?)",
+                    [
+                        ("zone-a", "2026-01-01T11:00:00Z", "2026-01-01T12:00:00.123456Z"),
+                        ("zone-a", "2026-01-01T11:00:00Z", "2026-01-01T12:00:00Z"),
+                        ("zone-a", "2026-01-01T13:00:00Z", None),
+                        ("zone-b", "2026-01-01T09:00:00Z", "2026-01-01T10:00:00Z"),
+                    ],
+                )
+                con.execute("UPDATE zone_state SET state = '1' WHERE zone_key = 'zone-a'")
+            zones = client.get("/api/zones").get_json()["zones"]
+            self.assertEqual([zone["last_off_at"] for zone in zones], [
+                "2026-01-01T12:00:00.123456Z", "2026-01-01T10:00:00Z",
+            ])
+            self.assertEqual(
+                [zone["last_off_at"] for zone in api._dashboard_snapshot()["zones"]],
+                [zone["last_off_at"] for zone in zones],
+            )
+
+    def test_falling_edge_updates_dashboard_timestamp(self):
+        import reborn.app as api
+
+        with patch("reborn.db.utcnow_iso", return_value="2026-01-01T12:00:00Z"):
+            self.repo.apply_sample({"zone-a": "1"})
+        with patch("reborn.db.utcnow_iso", return_value="2026-01-01T12:00:10.123456Z"):
+            self.repo.apply_sample({"zone-a": "0"})
+        with patch.object(api, "repo", self.repo):
+            zone = api._dashboard_snapshot()["zones"][0]
+        self.assertEqual(zone["state"], "0")
+        self.assertEqual(zone["last_off_at"], "2026-01-01T12:00:10.123456Z")
+
     def test_cycle_indicators_use_completed_calls_and_rolling_boundaries(self):
         now = datetime.datetime(2026, 1, 2, 12, 0)
         events = [

@@ -16,8 +16,21 @@ export function formatSeconds(value: number): string {
   if (hours === 0) {
     return `${minutes}m ${paddedSeconds}s`;
   }
+    return `${hours}h ${minutes}m ${paddedSeconds}s`;
+  }
 
-  return `${hours}h ${minutes}m ${paddedSeconds}s`;
+  export function secondsSince(timestamp: string | null, nowMs: number): number | null {
+    if (!timestamp) return null;
+    const timestampMs = Date.parse(timestamp);
+    if (!Number.isFinite(timestampMs) || !Number.isFinite(nowMs) || timestampMs > nowMs) return null;
+    return Math.floor((nowMs - timestampMs) / 1000);
+  }
+
+export function formatElapsedMinutes(totalSeconds: number): string {
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `${hours}h ${String(minutes).padStart(2, "0")}m` : `${minutes}m`;
 }
 
 export function asLocalTimeLabel(seconds: number): string {

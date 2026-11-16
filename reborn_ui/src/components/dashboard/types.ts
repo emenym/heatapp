@@ -6,6 +6,7 @@ export type Zone = {
   zone_key: string;
   zone_name: string;
   state: string;
+  last_off_at: string | null;
   current_uptime: number;
   day_uptime: number;
   total_uptime: number;

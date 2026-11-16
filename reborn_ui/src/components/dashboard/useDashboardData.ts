@@ -269,6 +269,7 @@ export function useDashboardData() {
     streamFresh,
     sampleFresh,
     dataFresh,
+    nowMs,
     setRenameDraft,
     setMapForm,
     pollIntervalMs,

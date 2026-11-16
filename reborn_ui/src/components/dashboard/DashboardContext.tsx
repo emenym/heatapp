@@ -25,6 +25,7 @@ const fallbackContext: DashboardContextValue = {
   streamFresh: false,
   sampleFresh: false,
   dataFresh: false,
+  nowMs: Date.now(),
   setRenameDraft: () => {},
   setMapForm: () => {},
   pollIntervalMs: 10000,

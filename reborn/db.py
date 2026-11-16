@@ -238,7 +238,10 @@ class RebornRepository:
         with self.connect() as con:
             rows = con.execute(
                 """
-                SELECT hm.port, hm.bit, z.zone_key, z.zone_name, zs.state, z.active, hm.enabled
+                SELECT hm.port, hm.bit, z.zone_key, z.zone_name, zs.state, z.active, hm.enabled,
+                       (SELECT MAX(REPLACE(t.stop_ts, 'Z', '')) || 'Z'
+                        FROM transitions t
+                        WHERE t.zone_key = z.zone_key AND t.stop_ts IS NOT NULL) AS last_off_at
                 FROM hardware_map hm
                 JOIN zones z ON z.zone_key = hm.zone_key
                 JOIN zone_state zs ON zs.zone_key = z.zone_key

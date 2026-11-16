@@ -8,6 +8,12 @@ demo is not part of the residential dashboard.
 Each dashboard section has an information button; hover, focus, or tap it for
 an explanation. The anomaly button also lists the current rules.
 
+In Zones, "Show Zone Key" reveals the key column, which is hidden by default.
+"Since OFF" shows whole minutes of elapsed wall-clock time since the last
+recorded falling edge, including when a zone has since turned ON again. A dash means no falling
+edge is recorded or its timestamp is in the future. Recording gaps and clock
+corrections can affect this value.
+
 The stream indicator tracks dashboard messages. Hardware sample freshness is
 separate: the last successful sample is saved by the poller or Poll Now, even
 when no state changes. A sample or stream becomes stale after three expected

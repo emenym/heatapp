@@ -37,6 +37,7 @@ def _zone_payload():
                 "port": row["port"],
                 "bit": row["bit"],
                 "state": row["state"],
+                "last_off_at": row["last_off_at"],
                 "current_uptime": repo.current_uptime_seconds(zone_key),
                 "day_uptime": day.get(zone_key, 0),
                 "total_uptime": total.get(zone_key, 0),
